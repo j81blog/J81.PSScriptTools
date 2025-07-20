@@ -1,0 +1,86 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="25" errors="0" failures="0" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0" date="2025-07-20" time="15:28:50">
+  <environment machine-name="JBC-JOHN" nunit-version="2.5.8.0" platform="Microsoft Windows 11 Business|C:\WINDOWS|\Device\Harddisk0\Partition3" clr-version="9.0.6" user="JohnBillekens" os-version="10.0.26100" cwd="C:\Users\JohnBillekens\GitHub\J81.PSScriptTools" user-domain="AzureAD" />
+  <culture-info current-culture="en-NL" current-uiculture="en-US" />
+  <test-suite type="TestFixture" name="Pester" executed="True" result="Success" success="True" time="3.0986" asserts="0" description="Pester">
+    <results>
+      <test-suite type="TestFixture" name="C:\Users\JohnBillekens\GitHub\J81.PSScriptTools\Tests\J81.PSScriptTools.tests.ps1" executed="True" result="Success" success="True" time="3.0986" asserts="0" description="C:\Users\JohnBillekens\GitHub\J81.PSScriptTools\Tests\J81.PSScriptTools.tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Module Metadata validation" executed="True" result="Success" success="True" time="0.7391" asserts="0" description="Module Metadata validation">
+            <results>
+              <test-suite type="ParameterizedTest" name="Module Metadata validation.Import module should be OK" executed="True" result="Success" success="True" time="0.5002" asserts="0" description="Import module should be OK">
+                <results>
+                  <test-case description="Import module should be OK" name="Module Metadata validation.Import module should be OK(@{ModuleName=J81.PSScriptTools; ModuleRoot=J81.PSScriptTools; ModuleFilepath=J81.PSScriptTools.psm1; ManifestFilepath=J81.PSScriptTools.psd1})" time="0.5002" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="ParameterizedTest" name="Module Metadata validation.Module FunctionsToExport should have multiple functions" executed="True" result="Success" success="True" time="0.0215" asserts="0" description="Module FunctionsToExport should have multiple functions">
+                <results>
+                  <test-case description="Module FunctionsToExport should have multiple functions" name="Module Metadata validation.Module FunctionsToExport should have multiple functions(@{ModuleName=J81.PSScriptTools; ModuleRoot=J81.PSScriptTools; ModuleFilepath=J81.PSScriptTools.psm1; ManifestFilepath=J81.PSScriptTools.psd1})" time="0.0215" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="ParameterizedTest" name="Module Metadata validation.Module version not be Null" executed="True" result="Success" success="True" time="0.0173" asserts="0" description="Module version not be Null">
+                <results>
+                  <test-case description="Module version not be Null" name="Module Metadata validation.Module version not be Null(@{ModuleName=J81.PSScriptTools; ModuleRoot=J81.PSScriptTools; ModuleFilepath=J81.PSScriptTools.psm1; ManifestFilepath=J81.PSScriptTools.psd1})" time="0.0173" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="ParameterizedTest" name="Module Metadata validation.Module CompanyName should not be Null" executed="True" result="Success" success="True" time="0.0302" asserts="0" description="Module CompanyName should not be Null">
+                <results>
+                  <test-case description="Module CompanyName should not be Null" name="Module Metadata validation.Module CompanyName should not be Null(@{ModuleName=J81.PSScriptTools; ModuleRoot=J81.PSScriptTools; ModuleFilepath=J81.PSScriptTools.psm1; ManifestFilepath=J81.PSScriptTools.psd1})" time="0.0302" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="ParameterizedTest" name="Module Metadata validation.Module Copyright should not be Null" executed="True" result="Success" success="True" time="0.0178" asserts="0" description="Module Copyright should not be Null">
+                <results>
+                  <test-case description="Module Copyright should not be Null" name="Module Metadata validation.Module Copyright should not be Null(@{ModuleName=J81.PSScriptTools; ModuleRoot=J81.PSScriptTools; ModuleFilepath=J81.PSScriptTools.psm1; ManifestFilepath=J81.PSScriptTools.psd1})" time="0.0178" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="ParameterizedTest" name="Module Metadata validation.Module Author should not be Null" executed="True" result="Success" success="True" time="0.0168" asserts="0" description="Module Author should not be Null">
+                <results>
+                  <test-case description="Module Author should not be Null" name="Module Metadata validation.Module Author should not be Null(@{ModuleName=J81.PSScriptTools; ModuleRoot=J81.PSScriptTools; ModuleFilepath=J81.PSScriptTools.psm1; ManifestFilepath=J81.PSScriptTools.psd1})" time="0.0168" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="ParameterizedTest" name="Module Metadata validation.Module GUID should not be Null" executed="True" result="Success" success="True" time="0.0167" asserts="0" description="Module GUID should not be Null">
+                <results>
+                  <test-case description="Module GUID should not be Null" name="Module Metadata validation.Module GUID should not be Null(@{ModuleName=J81.PSScriptTools; ModuleRoot=J81.PSScriptTools; ModuleFilepath=J81.PSScriptTools.psm1; ManifestFilepath=J81.PSScriptTools.psd1})" time="0.0167" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="General project validation" executed="True" result="Success" success="True" time="1.5361" asserts="0" description="General project validation">
+            <results>
+              <test-suite type="ParameterizedTest" name="General project validation.Script &lt;file.Name&gt; should be signed" executed="True" result="Success" success="True" time="0.2877" asserts="0" description="Script &lt;file.Name&gt; should be signed">
+                <results>
+                  <test-case description="Script Test-IsJSON.ps1 should be signed" name="General project validation.Script Test-IsJSON.ps1 should be signed" time="0.1135" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script Get-GitHubCommitDescriptionByName.ps1 should be signed" name="General project validation.Script Get-GitHubCommitDescriptionByName.ps1 should be signed" time="0.0332" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script Invoke-ScriptUpdateCheck.ps1 should be signed" name="General project validation.Script Invoke-ScriptUpdateCheck.ps1 should be signed" time="0.0393" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script New-GithubGist.ps1 should be signed" name="General project validation.Script New-GithubGist.ps1 should be signed" time="0.0339" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script New-VersionInfoFile.ps1 should be signed" name="General project validation.Script New-VersionInfoFile.ps1 should be signed" time="0.0334" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script Update-GithubGist.ps1 should be signed" name="General project validation.Script Update-GithubGist.ps1 should be signed" time="0.0344" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="ParameterizedTest" name="General project validation.Script &lt;file.Name&gt; should pass ScriptAnalyzer" executed="True" result="Success" success="True" time="0.3392" asserts="0" description="Script &lt;file.Name&gt; should pass ScriptAnalyzer">
+                <results>
+                  <test-case description="Script Test-IsJSON.ps1 should pass ScriptAnalyzer" name="General project validation.Script Test-IsJSON.ps1 should pass ScriptAnalyzer" time="0.0767" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script Get-GitHubCommitDescriptionByName.ps1 should pass ScriptAnalyzer" name="General project validation.Script Get-GitHubCommitDescriptionByName.ps1 should pass ScriptAnalyzer" time="0.0127" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script Invoke-ScriptUpdateCheck.ps1 should pass ScriptAnalyzer" name="General project validation.Script Invoke-ScriptUpdateCheck.ps1 should pass ScriptAnalyzer" time="0.0199" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script New-GithubGist.ps1 should pass ScriptAnalyzer" name="General project validation.Script New-GithubGist.ps1 should pass ScriptAnalyzer" time="0.2182" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script New-VersionInfoFile.ps1 should pass ScriptAnalyzer" name="General project validation.Script New-VersionInfoFile.ps1 should pass ScriptAnalyzer" time="0.0053" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script Update-GithubGist.ps1 should pass ScriptAnalyzer" name="General project validation.Script Update-GithubGist.ps1 should pass ScriptAnalyzer" time="0.0065" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="ParameterizedTest" name="General project validation.Script &lt;file.Name&gt; should be valid PowerShell" executed="True" result="Success" success="True" time="0.1639" asserts="0" description="Script &lt;file.Name&gt; should be valid PowerShell">
+                <results>
+                  <test-case description="Script Test-IsJSON.ps1 should be valid PowerShell" name="General project validation.Script Test-IsJSON.ps1 should be valid PowerShell" time="0.0757" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script Get-GitHubCommitDescriptionByName.ps1 should be valid PowerShell" name="General project validation.Script Get-GitHubCommitDescriptionByName.ps1 should be valid PowerShell" time="0.0061" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script Invoke-ScriptUpdateCheck.ps1 should be valid PowerShell" name="General project validation.Script Invoke-ScriptUpdateCheck.ps1 should be valid PowerShell" time="0.0285" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script New-GithubGist.ps1 should be valid PowerShell" name="General project validation.Script New-GithubGist.ps1 should be valid PowerShell" time="0.0395" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script New-VersionInfoFile.ps1 should be valid PowerShell" name="General project validation.Script New-VersionInfoFile.ps1 should be valid PowerShell" time="0.0068" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Script Update-GithubGist.ps1 should be valid PowerShell" name="General project validation.Script Update-GithubGist.ps1 should be valid PowerShell" time="0.0073" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+    </results>
+  </test-suite>
+</test-results>

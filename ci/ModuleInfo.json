@@ -1,0 +1,11 @@
+{
+    "ProjectName": "J81.PSScriptTools",
+    "ModuleData": [
+        {
+            "ModuleName": "J81.PSScriptTools",
+            "ModuleRoot": "J81.PSScriptTools",
+            "ModuleFilepath": "J81.PSScriptTools.psm1",
+            "ManifestFilepath": "J81.PSScriptTools.psd1"
+        }
+    ]
+}
