@@ -51,10 +51,12 @@ if ($env:APPVEYOR_REPO_BRANCH -ine 'main' -or $env:APPVEYOR_REPO_BRANCH -ine 'de
 } else {
     if (Test-Path 'env:APPVEYOR_BUILD_FOLDER') {
         # AppVeyor Testing
+        Write-Host "Running in AppVeyor environment..."
         $projectRoot = Resolve-Path -Path $env:APPVEYOR_BUILD_FOLDER
         $module = Split-Path -Path $projectRoot -Leaf
     } else {
         # Local Testing
+        Write-Host "Running in local environment..."
         $projectRoot = Resolve-Path -Path (((Get-Item (Split-Path -Parent -Path $MyInvocation.MyCommand.Definition)).Parent).FullName)
         $module = Split-Path -Path $projectRoot -Leaf
     }
@@ -72,7 +74,9 @@ if ($env:APPVEYOR_REPO_BRANCH -ine 'main' -or $env:APPVEYOR_REPO_BRANCH -ine 'de
 
     # Tests success, push to GitHub
     if ($res.FailedCount -eq 0) {
+        Write-Host "Tests passed, preparing to publish module(s) to the PowerShell Gallery..." -ForegroundColor "Green"
         foreach ($moduleItem in $moduleData) {
+            Write-Host "Publishing module: $($moduleItem.ModuleName)" -ForegroundColor "Cyan"
             $module = $moduleItem.ModuleName
             $manifestPath = Join-Path -Path $projectRoot -ChildPath $moduleItem.ManifestFilepath
             $moduleParent = Join-Path -Path $projectRoot -ChildPath $moduleItem.ModuleRoot
@@ -94,10 +98,10 @@ if ($env:APPVEYOR_REPO_BRANCH -ine 'main' -or $env:APPVEYOR_REPO_BRANCH -ine 'de
                     $Params['NuGetApiKey'] = $env:NuGetApiKey
                     $textToShow = "PowerShell Gallery."
                 }
-                Publish-Module @Params
                 Write-Host "Publishing $module $version to the $textToShow" -ForegroundColor "Cyan"
+                Publish-Module @Params
+                Write-Host "Successfully published $module $version to the $textToShow" -ForegroundColor "Green"
             } catch {
-                # Sad panda; it broke
                 Write-Warning -Message "Publishing $module $version to the $textToShow failed."
                 throw $_
             }
@@ -111,8 +115,8 @@ Write-Host ""
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCLp5UNGzh5Xnj2
-# Bizjiedp641bADD2ohcLywf/gqORhqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAFMZBWhTeUJlEf
+# tof3ETLxqm80+njMnVFEvFoZaK/1eKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -288,31 +292,31 @@ Write-Host ""
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAtI2Ft9X1SFPRWGz5QPGDRIjlfGh6MNKImbyzBFVUq
-# ZjANBgkqhkiG9w0BAQEFAASCAYC74nWqJMXB2Bc2qJUHtThn8gdZEGY9ywqtCuVn
-# PaxxRj2Jn2zoQfsTcGF/NFrSGEB4D5gEyiFSTiC5xVXpYxlicJ3zy7qCu4bG5vsW
-# ORTRgQxxTqVPkNbaQ6KCuwjXgQ9kHP09oGIQMfgU0+D25EYvZAC9zeDoFE3fiGQb
-# ALmnqc+zSBFj1Uyzq9hd1Vp38xktR0JzMdrkByZu7ntuDrZwAvqOxoTscljIsgtG
-# fIttoNbnIbH48iEI1F9JgXCpYKPeTz+p7GQMGv8GrcilG6qEu6PxURhwOQXwv/Ga
-# l4cTtrCmbRvosfAIaeHifkmsrZrw/dqnH0AafWP/aJYjHgQZbWVexPVrvbmeKhRM
-# dSLGEoPlMAEkRte+1qLsaRMXHpUbhX+MmUgMBoB0Wfx2lLWUxkgm0VKwRiz21SlL
-# t0MvnKgsHGMt0pBtuvgsmjb/XbEnmEcMyCvVnAkhonH1owiLoogRTboXLy31JGAC
-# 1O2G6tTwnzeq1GJF7QiPoL+kNV+hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCBLt9NaWM0N7fkCsvqjJnADBhhxV+zdoIvkytjB9QTk
+# HjANBgkqhkiG9w0BAQEFAASCAYAQrBIeSGQethpb11SrdZRsYdwBH29YTCOGifnt
+# kX1VZbVH5Tl0JWugFfC7Zwb/ILLSWXg1FWC+lvNIpdJTwLHMzTjumNZU/OfADi8h
+# Cs7o7mlqXbmGMOxbK6yTU+3EsIjeCmdrDKJXbRY+f4b+Lu2Baslh5MjaVin3TvOH
+# E5HUzpMim/zTiAa7kLh01ZxoS6NG5M5edo2tUQWMRmiZYb9iPmYntrbCyft3iR5D
+# Mt04jyxAh9bhoJ9dLlYefvoQvmsk44YzGjetjAFXU36RPF17bXwtajHQBZjrFJQg
+# uQ+m0BNzy3iyKWG4HVuNzaidaPByw9ZRlcSDmlOhW64GxnstjKlm76Qep91x1ZCx
+# JVRDtpeCXnq9kMqeSQwS+L4bLHiI5bSHdyXV5wAhzZ9X0FWpi5Mi+pcxTX+O5F+i
+# qvdoTjP8O2wrLGNxilDjIzWNqr1XbHF4IQ3+vFR1Ge4tcACVEFt8Xh5sCWhaFh9l
+# 0bOAwxdzIhxG7VjsIQ7NHsnZGnihggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA3MTYwNDU3NTlaMD8GCSqGSIb3
-# DQEJBDEyBDBKKeSBb7YdCLwrU2jxzjvgeNLhR3CMwmyhlFKXmss0w18ZOUJ9Kx/y
-# 0xn24iKfyhIwDQYJKoZIhvcNAQEBBQAEggIAS+HVtWu3gpzViiQJKZp9YekCgkvk
-# xsbyim69qx3ouDCXctYurZ2T0z8o7fifa3GGDByGGR+9zMa855hT+y4bDA51isrb
-# JV0vHAXrvS9DLRVWQLrC1czJIwzrtyedTskm3n2R8neorz2nMmBLi+BxN/HCsYuW
-# Yud5wkNfL9mkulkV+85hIa2lqu50bbkEnGIVE2o4rPI2xes/6bJ42NCg3CvLAiZ3
-# jAp9/LBimbJEl4d3Wj15+O1vbZtpqU245M2/HgzHSk1kL9BYEqBBB7O/qV3MPVdu
-# 3PikuyWvSKUXRWr27Y1URO9ghi8NciSSsCIMn4oPaByz7lA0VjfLKS138Tt5E1/i
-# uB4HVLZANTtpcWp4sOMfDIf++nv3y20hJmErkDphS2XTWMQ6eIW8jD7RHfvOMV5Y
-# IOBNibEyNiiJ+2HGEJS0bV0nKNCSRquwIOZmYLdf4M1ZP9boqiCpcjLVKro0yJ/F
-# FkS+Gi4pbTsS2S6PzV8UER5AdjNzQ/egDEZvp9QWd8JQazdyNJlTFzfZ1j6vkX2C
-# SSUzYcFu1gOaJ0fySubI+zzTeLipqmOr3XwcHn2oKFZScqUuw/vJ/O7nOeLNGa8n
-# QETQxgy1E5qvhsQPZC6jk2DX6lUZs4tzL8AlWZsfx92WTrpQDTx+IqKhm2slnUX/
-# LH9UiXEj1TU8eEk=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA3MjAxNTAwMTFaMD8GCSqGSIb3
+# DQEJBDEyBDCZ324S8LIVRIxsNTFj0Y4c+1QXpHiPnqRH2o9IrcQ+oM57YxoBzY+H
+# HZ6eyoSe5MAwDQYJKoZIhvcNAQEBBQAEggIAQK2VZrI9yxJwWzHiStGAcX++hkzd
+# wU4lJ+Z8i39uGHcM/4vASzaALFnLu/zLDv7Et9mnVPCYRhsAsfJWtJOG1a72/MqX
+# Ua10V2phixvvitGcRgDKssIzoPqPgKKEwLLqgogx5FoVSydJ2bbVP5iJ7ig935T2
+# Rs2W/oSmqATPO6llLEy7m3Sqxqz3MtOyKeARhgelWNWM9MsyV+tZRg3p3kt8ntRF
+# qZqeIyYavaUOHL2l+SGzpkpz5UIxjYuvsr6WIOQjPoHaewzm0EM4ZcknX2KYHCry
+# SBz47h9rEmwKRso7+WPg4DeRsGAcJ1ALDWbvwG+fXxEuw7Wd0soGmMXfKCiz7ftY
+# LNecnCwCwTE1/sOdm1F7RA0LL1ILDeVsslSH37Jkl4PbNkDFONKxIM1pezXH4Wp0
+# 7eNodosofpUoMZWHi7+hJ/dD4wOHjyJdGBQcwLmh1i4mFbMKEq0hAnGpfp4Uq+yf
+# NutX9Isb+eoHwH+U+ee+IwVW3oMLU3Lyd84do3r+KCXjPOFCyyP/znUsEi63RlLD
+# 2j1TFPW4EDeiDnVPxYrD5gKJewyWhyyw+1EqJiai61Zf9WlEiR77IEaq0NZCgeJ3
+# d8Vydhlu1GRQJaQh/V2sOtflG10dJFKGXl5aHnlb9ZXu9D7+uodGMIDik01HuItB
+# ZBikkH+tcGQo9n8=
 # SIG # End signature block
