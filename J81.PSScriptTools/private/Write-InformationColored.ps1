@@ -21,7 +21,7 @@ function Write-InformationColored {
         The information preference to use, defaults to 'Continue'
     .NOTES
         Function Name   : Write-InformationColored
-        Version         : v2025.720.1800
+        Version         : v2025.814.2045
         Author          : John Billekens
         Source          : https://blog.kieranties.com/2018/03/26/write-information-with-colours
     #>
@@ -41,6 +41,12 @@ function Write-InformationColored {
         [String]$InformationPreference = 'Continue'
     )
     #Requires -Version 5.0
+    if ($Global:InformationPreference -and $InformationPreference -ne 'Continue') {
+        $InformationPreference = $Global:InformationPreference
+    }
+    if ($Global:Silent -eq $true -or $Script:Silent -eq $true) {
+        $InformationPreference = 'SilentlyContinue'
+    }
     $messageData = [System.Management.Automation.HostInformationMessage]@{
         Message         = $MessageData
         ForegroundColor = $ForegroundColor
@@ -53,8 +59,8 @@ function Write-InformationColored {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAEX7QuWLujubTi
-# 8aQwQTUET9wLrxU7cDeOHzOWMOFumqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCABEfhNhIkoIYzq
+# 8vXEIwTzqky0Mre+ieEcLkFyp/tqK6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -230,31 +236,31 @@ function Write-InformationColored {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAMtDsMxHcKP+dJPMIkbGFqPd/VhpWB2nGLYh6SEBGL
-# yzANBgkqhkiG9w0BAQEFAASCAYC0F/Igo9uw6Ujzq8ey0wIht2HV8YDjT3ufMRGU
-# m/bh7U20HhTWTW6S5In8Dforpg6n/Y6OdeWq58mgV1VAsxKaHCG9ek7ZDF+n828z
-# Nvz+k3aM1rAYOPpDxT5xPiWY/yBxxiPuNfBovv/r2KjdSFcpgHJoc9laoBYuSINT
-# dSJUZtW7/VOGZooxjmaSOQdl7oNcc+EKPmDl8M/rPERasDLv5CJkeUDez5GLGy9e
-# co1kg3SiKqu/G22V3z3PYtSUbbTtLVIKaK5Ii1hQi7c1aUq0xKTi6v0WYUbyQhQu
-# ExHtEGrzDPQ5sSq/R57nRLOTp7vsL6MBl2Sl1IV1V6p9r55/v1aKa295tcFJ0dC6
-# 8G0tUHGT+emeQoPsJpgKukjuahRUwB9zVu1YDyQuao0f4NpRvB7ZDK45SF+lMhzs
-# 0FXb4KI/san/XRTP0X1iamUxcJ+kAOphjpe1wGKFfyCFg6bSgIDGkDyfXgaWUSMJ
-# Qs9W+ML7s9Wvuex4N/LfriHPGuehggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCAAzZI2f4r3ze/v7zcbvp9dG1Yf3sE4AMUa4jsmaakA
+# mzANBgkqhkiG9w0BAQEFAASCAYBqw853dtYHtQIx93rJ9G9yVEiTaWh27+jpEGDQ
+# 9JvrtozhB7HspA63d1ma0rY6xVFV7AR5VrsfIEKHSYXf8XTA3PXeSxaxfD9IZ9sr
+# Z3eJDlL+om4comEUf4YHMQwIwHAtnXo4LFNQwIyGV+ey8WmBZKdD77i35ah0/wY0
+# /vpW0AzppfYRohW8B4iNAF+jt+2iDsBlgihv5kSQzo2DLa/UAYe/HEUftLzKMvoB
+# LX4dqPw4UhkTZetFjxcGaRufYPeHNx6kcHOAYbT2jImkqJK06vZfmv7wYLU+6FJT
+# wQMV5n6VozIYFt3GBrV/gBMqb0B7FLDsEuGr/YnBfXDfh5sukLBK1RnRqMXVT1TQ
+# aXyrmdsDT/2ICLryU4sWQ6HhbDNKw1uW1XKJYrLzEkzPMZbi72gMCcr1JbMUc1yC
+# /38IrkS7TSwD9e0J51/cbwhms0XxfiGA+mc+q/FrTtlv9VFfpQqscUkbNyiWgFH8
+# dsaj/MuH02OxGvkfwoV5vtyRiRehggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA3MjAxNTU3MDZaMD8GCSqGSIb3
-# DQEJBDEyBDCMCbyR1v2/dUscM3BmZ1xz+tePP+InuC6HPmXMyQ4y7AzzHhQ5wfqx
-# 1D/KYov6ZdQwDQYJKoZIhvcNAQEBBQAEggIAip79ilFc4x1MBhiTnkbAACkIuJOb
-# 6W0DZFUZJ9EuN40MkmlZI7TPZIrwMnfCZzZjWrUapVKz7ofvGFxru41AUkLY4NDC
-# LfolMIvvaSAVxOk8jKijWVDW3D1WndrPGCjOdEY85DfzhB3rx/ARiDE6BAkr7SvD
-# CXg/cgHT2PAx/CgIOTaaYalzu3VM9h7E+diJUnDpvZueSIbJflVrWlEWN1b1hkMu
-# 3mufGGxNGonJuyCwi2wyGd2LDSdW5siyOnZZqEDE9OatSYMV6Xf5SKokNlkjfBKI
-# y+kmb4d5NGYKgc8OFaz3p0QaeedwvEYOx6mAqjmaodx2hF/cDyJ8mRwO0ScrvBZt
-# XIlc3aHQx2TJ8eeoAHc3lzTu19xIQy7vAKkcffTYLnhEg5ZGbu3JXBQFZXQR4Nq6
-# OBoQBGwq6KBU2TTONE+Xa+mbQUQhsF/WVKZlOLKqit1oicOVi0mmMsll3S8QU74k
-# b+kVxizejPK9Lr/Gl1trbi4i2qcWsXYXxK2rmqrl8Nn7M+Hjnqtsa19iwH74wr1M
-# /PU8SvlMIfRG1sruEUVzwx+X2hBL4jsXh0OC6IoFYMFLiLaJH8kGn4oPK6RPR8u8
-# ZCm9Cy9euS/EVjj5xHFCv0UvvVhMFIo+2iVkQ8jiDjN7grruDC8skMBAyZMBj5VI
-# kDBTQc09DUj/UFQ=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTQxODQ3MTdaMD8GCSqGSIb3
+# DQEJBDEyBDB4tzOpkDRn0P7VPevBN/lk2xYn0LXaEQjSLJ9PYywTD37/8/So+QcF
+# p6Mgmv0xDIgwDQYJKoZIhvcNAQEBBQAEggIAKsyZUk6XU/qkpbPZj8uknmsK3Xf1
+# 0rRnS4e2n2cEkcmxtIBXVdpqHKPzH0twVIW69Vy5bYczQNPw8XY5SHppJCC4q67J
+# Be2I2Bvr4KHToegX7HfyuLdZJshF2UdgTACJW4y/j+/XPpzHVhLHNABXEIPheQyC
+# msB46R/W683q6NskfmkbN0EgmYG0KH9102khm4V35+9PMtqwj7jXRSupAINWurgO
+# LtnHr2SuGapoVphAvOb2E+bHNTylr74aoQR5sMS98EzLR9FJqOdMc3ZvYmdolPXF
+# ufJafMHkLGfAZiyu8KCBtAdsvl9DqAwKW7R5co1ccPsLoSJC6XHqNbPo1Tt1l9Bb
+# bRHJAeAV9mxpx07n3RtvmDzn0hy3dQUbnLKKCoJAOnkcZX7m5ovybI/v5vyv/ukU
+# 9T4jLY+o+uZ3VVM/d/baW7vQsvp5cz1SDuipMui4lFwrrtHBYN8Ot0nTDHTxkw/H
+# LM/E+8+0mgoTBjpBd7m9vyHLJMQe7jXxfxkZDKd8VKQveNyldgWLBLZJEMyaolDL
+# zpTk0GGYFWzq5eGQeZT4wEQub9jWrweOMZKc7hUK5lA68RvpcJRssLKkTQyrnRxB
+# DLIM8sROkDfJca7Dxr99jMggbSyHABwQ3uvsn/kow30c/vkBjAIsgrmr8DoY0UkP
+# RRPgkw16+mdcKbE=
 # SIG # End signature block
