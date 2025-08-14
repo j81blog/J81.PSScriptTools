@@ -31,7 +31,7 @@ function Invoke-ScriptUpdateCheck {
 
     .NOTES
         Function Name   : Invoke-ScriptUpdateCheck
-        Version         : v2025.814.2100
+        Version         : v2025.814.2115
         Author          : John Billekens
 
     .LINK
@@ -39,7 +39,7 @@ function Invoke-ScriptUpdateCheck {
 #>
     [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = 'Github')]
     [OutputType([boolean])]
-    param (
+    param(
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
         [string]$CurrentVersion,
@@ -89,11 +89,20 @@ function Invoke-ScriptUpdateCheck {
     )
 
     if ($PSCmdlet.ParameterSetName -eq 'Github') {
-        if ([String]::IsNullOrEmpty($GithubOwner) -or [String]::IsNullOrEmpty($GithubRepo) -or [String]::IsNullOrEmpty($GistId)) {
-            Write-Error -Message "GitHub owner or repository not specified. Please set the `$GithubOwner and `$GithubRepo variables."
+        if ([String]::IsNullOrEmpty($GithubOwner)) {
+            Write-Error -Message "GitHub owner not specified. Please set the `$GithubOwner variable."
+            return $false
+        }
+        if ([String]::IsNullOrEmpty($GithubRepo)) {
+            Write-Error -Message "GitHub repository not specified. Please set the `$GithubRepo variable."
+            return $false
+        }
+        if ([String]::IsNullOrEmpty($GistId)) {
+            Write-Error -Message "Gist ID not specified. Please set the `$GistId variable."
             return $false
         }
         $jsonUrl = "https://gist.githubusercontent.com/$($GithubOwner)/$($GistId)/raw/$($GistFilename)"
+        Write-Verbose -Message "Using Github URL: $($jsonUrl)"
     }
 
     #region --- SETUP VARIABLES ---
@@ -112,6 +121,7 @@ function Invoke-ScriptUpdateCheck {
     }
 
     if ($Rollback) {
+        Write-Verbose -Message "Rollback mode activated."
         $backupFile = Get-ChildItem -Path $scriptRoot -Filter "$($scriptFullName -replace '\.ps1$', '*.bak')" | Sort-Object -Property LastWriteTime -Descending | Select-Object -First 1
         if (-not $backupFile) {
             Write-Error -Message "No backup file (.bak) found to roll back to."
@@ -128,8 +138,10 @@ function Invoke-ScriptUpdateCheck {
     #endregion
 
     #region --- THROTTLING ---
+    Write-Verbose -Message "Checking if update check is throttled..."
     $lastCheckFile = Join-Path -Path $env:TEMP -ChildPath "$($scriptFullName)_lastupdatecheck.txt"
     if ((Test-Path -Path $lastCheckFile) -and $CheckIntervalHours -gt 0) {
+        Write-Verbose -Message "Last update check file found at $($lastCheckFile)."
         try {
             if ($ForceCheckUpdate) {
                 Write-Verbose -Message "Forced update check, ignoring last check time."
@@ -253,8 +265,8 @@ function Invoke-ScriptUpdateCheck {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB5PVoDIq/8VUUr
-# +BK7OOq0buQ1FkQV+6wPuaWGq4ROdKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBEbWp6/cyo5koj
+# CiBzeFzTrpN6ueXqECnwdxyq1D1GAaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -430,31 +442,31 @@ function Invoke-ScriptUpdateCheck {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCATtB7/rA2sFRjJpzb4gE1gkRhVcU14MOh4OSmmrKQL
-# kTANBgkqhkiG9w0BAQEFAASCAYAuxfOmnN55UNnL5TaqTNQFcfYli7dXeWsulxlz
-# nPl2axHx0nZ3IyCkg4xtntaG1Yvviu/EfN2GCV7XMehbvAxO0Ni3T4l+c2JD+HLE
-# jvTfY2hMMsPAGqf1/2T1ZIv+gZi5uVESxs04QcBKjyJWlBq0LNVhr7s+Fo6deP2O
-# jA/3vSrPfllCop0EWOw39Ko7ObWTbk2dus4VVILi8AgMI+yg72gNT8juQTo2BdqO
-# hXV63g0Bg0ao6T0NHxZkdexAYjTRhWBcGWuDOsQmWmzOFd7bd3aSok6FXkRY+znY
-# /yFXV6Ezn1mIcAB8W27nLQIeohEVvxDeEGA0HgQXy0kAjF+W7R2kXvDk1SvMYhU2
-# 8IOMLcuH/0QoPEQ+wL3rz7yu6+g8Tel7OvTZ4eVdOd9vOfVnf7W9+SUOxrhNCVjq
-# /fDthcoVhpwfI55bjw+BPtmLEdiQcE54MsPRJqIooXpctU/kC811wnxgToYu+OmD
-# E2tK0kcy+BQ5cdEGzAUUwik3xJ+hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCA6QmdqZH8t76lDc3/3d7fzpyh2ieyqX8IN1nxuwrCA
+# HzANBgkqhkiG9w0BAQEFAASCAYAqKU5EfXsIQrmzeZKD0sdH9eGyoHKlORWkj+3N
+# GySGTGnMMfigUi6pAa8dCNSDaPheUZ8Vrg1a3feoXGFYgleZtgn6lZieA9+0YDSt
+# 28B+CEzVyEqueoqMMXzM66c0edZe+Tt0cPOhKbF098SdLsTeCiP2U27BkhJNAVHX
+# O0iVdakwV4nDe5nnyhQre5oNgw+qgwhK2Jnj1DqN8BJf4leqv6KgDMGW/4JR3Cbe
+# bdA35ansz1/PKlnuQ8RCSAoFy1cjKJH9Y7Cs8Mn51qas0unGq4pDxDVu239i4Nss
+# meIjv6ZmGdRVKDE/t3atud57WiMepA9ewe3VJQJ3rscOzfCSqkWk0LzQ46SruLsL
+# G9riodwrsiXHERCc0adXUsVpTZV1qe7pZqGzc4YpbuxTDtNcoLV5qQykIUf/BR2m
+# S8X6XJYUfdX3DQkR23e2AaVeXHwVjxsErJfHmlA0YbsCGl539W0DKnunugVuFTUP
+# FRC76p30rUt0AihyO6V2nOHtTmWhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTQxOTA5MjVaMD8GCSqGSIb3
-# DQEJBDEyBDBxvop9UCDWMdQbEclIjx//w3NkUOT/TbKsFFFPKFfrMmD82DDtxZv/
-# 2NwjTBs7fTswDQYJKoZIhvcNAQEBBQAEggIAgXOprL0Xu/54p6p6HzE6dIcA2QB9
-# MSfMFmUv9qkIoyWviNqGbmNaTl/k1shqPWh3DJ2WKKvfsJkqsyCk6rdo4fG+jn2I
-# zMZaUgCJKSBaLFyWjicb7YYv2VTAE/ZATd/J6sIJh46gff8YTc7a2UdFluGack4j
-# J1O5SfnuHEAgT5uNmSzaHcs6Rc7IbgyexvwjzDsb8BOfwiJMRQEN3/7cncma11fw
-# rTSM63Wn5yj4GD7G/e/WWqGQPRa2bqJltiqu+kXrhH2GyzLe8d0hy0qy1mJWUB7x
-# I5ejw0xI+d6v0qzmQRMKGrnc0op5rAvsHF9oSsMckRQ+CjKXnRcQDl/yLJ0rKEOM
-# PtXD4fsxBJ8ZalX92y9YN8sVKCpKz6YeLq6t0J+08La0HeNKLve2788APzqetsDs
-# 3bCA6Cc4VqAiNEytgB0hLGNKMtKnEPW4AR4t/A/jKcKW5j892p8h6wL3BhIrJu9H
-# LjaMTacYs/oMyBusil2eMNm3wY6t/fdlGxdwSo9G3sng03QxBvCwWsnfcCGlzVvN
-# D5iw2cd1jofgBTIzq8w0KetsaDgjGn8358iIJRrcqoW11I/XY9vjIH6/NLL8IOTe
-# asJ5mabbrO13VBSb2+MqT7pD9/DAN16oA8mD4UnBbPVgx1OfH+WcknH2IeJHk3ou
-# 9QEAV1J/jfIn4aU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTQxOTIxMDZaMD8GCSqGSIb3
+# DQEJBDEyBDD+jrp3BTJIWrC+8A/Kjt9+9SKohNEoEN0oCQvCz7/tqu1gLl5bUshO
+# 7H44GLn2d3IwDQYJKoZIhvcNAQEBBQAEggIALgsXyLu3G7pGOeGvlTFnFeg72QUI
+# gHrunG/yf65dLUlijg0izjhv/OQ+BoCOVEipz65aMOEx/4eyjbRdzaD3cOdtBX0p
+# D4Op/oHUkb4D95uRh7Az/Zdy+oqsA7JPC2ZFpZ2HAZXUdkw8E3qsnBmLMZhWsqoZ
+# T+bYcjPms5ePDhYBvM4Rb6BHgZNVXnUg2E41fZ0f5zh19qsgsEu+pjU3qehPrDLp
+# lZ+cTY7bl2XodYhD7buRTZdei0BLtnCAgAzvT5R94zU4n0k07QNvjqgg3sco9sJz
+# uXPG7k2ltbVGxUKaeMog7c/wr6hogXl0otD/DVOusvGscJhKCdJ460RXsxRlsiZn
+# Wz86+YNBmeYOs5+6IJnWk/pfkwPr5dP3T+jcmfV8guJoOQqoFP3PLqJBuXG0TAYP
+# BpRhEqfQUUEpEkNSmPI5OKQHk5fmkLDXNvCEQNZPe5WTnBT7d7STXQ25Qu/8hX1K
+# JOuK+jvWEErWi3LNLk2gLSDyiI8FQRiDJ1NIMKVRIQs8Ly3chkzIHzVBbRs56sNW
+# MpYBNweqgdm1bNzzFQaNLtGG/tEQ2dOblwKNaVLiuHNmyzeOGx/IpZMlVuF2Aofg
+# bJoafoRQVE3y9rSa8lqN+k0fblYel+Xg1FEl5t7hfdkzmqAlagJSup5qbfv5ObWL
+# oBaF7VLQoHWmqZQ=
 # SIG # End signature block
