@@ -31,7 +31,7 @@ function Invoke-ScriptUpdateCheck {
 
     .NOTES
         Function Name   : Invoke-ScriptUpdateCheck
-        Version         : v2025.814.2045
+        Version         : v2025.814.2055
         Author          : John Billekens
 
     .LINK
@@ -67,18 +67,15 @@ function Invoke-ScriptUpdateCheck {
         [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
         [int]$CheckIntervalHours = 24,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
+        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
+        [String]$GithubRepo = $Global:GithubRepo,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
+        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
+        [String]$GithubOwner = $Global:GithubOwner,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
+        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
         [ValidateNotNullOrEmpty()]
-        [string]$GistId,
+        [string]$GistId = $Global:GistId,
 
         [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
         [ValidateNotNullOrEmpty()]
@@ -92,7 +89,11 @@ function Invoke-ScriptUpdateCheck {
     )
 
     if ($PSCmdlet.ParameterSetName -eq 'Github') {
-        $jsonUrl = "https://gist.GithubOwnercontent.com/$($GithubOwner)/$($GistId)/raw/$($GistFilename)"
+        if ([String]::IsNullOrEmpty($GithubOwner) -or [String]::IsNullOrEmpty($GithubRepo) -or [String]::IsNullOrEmpty($GistId)) {
+            Write-Error -Message "GitHub owner or repository not specified. Please set the `$GithubOwner and `$GithubRepo variables."
+            return $false
+        }
+        $jsonUrl = "https://gist.githubusercontent.com/$($GithubOwner)/$($GistId)/raw/$($GistFilename)"
     }
 
     #region --- SETUP VARIABLES ---
@@ -252,8 +253,8 @@ function Invoke-ScriptUpdateCheck {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCddmnw5vaCG+6f
-# KB7e2emcqdZkEAncGPrWrdKHD689jqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAUA38YvNwO6Bck
+# uf7oJzftVfu+XyciaNr8SI5SpmS40qCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -429,31 +430,31 @@ function Invoke-ScriptUpdateCheck {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCA7JvmHJ1Gtx0cfaCRS7+o/G2Rn378l/hv/2VHpJ4yv
-# EjANBgkqhkiG9w0BAQEFAASCAYASx9/Rt13lf06AcKK1gg+t/qQrhpf+igC55frJ
-# vpHxwLjVZs+m9Xy5wyLmvL3ASdKn3kDZ75+FL7Oy2odzL1lbTLihAUywTQUuWBE/
-# 7YdHaGyT51rpgIYGojTF84/n/k2d3V+8/5+Su4IyDrxe0tdANTV14bfRsCibP90K
-# tpUdZY5GbR9y/cNjfCv2VWWD78NEAss3x1kc9+dMqlZTPZqQjm7eefIH12ZFXu0c
-# TQgvQK+eDx+8Qr9bgDaLOeQxFQC1YFlIDJseA1XTQdDffq2jEtgAWewkRyp1QdSi
-# RD329lLeQOEjOguQNrA2jdZ8MtPDacS6SgX5lxhAldg+AF7FdjcTykfRS9uZGbiM
-# SWl17SupQTzq7+IPJzU9num8nq/fKjRL7cNDgWOP0Co5zc6llaU74De1CMfWhBqf
-# Lz/Qg1utfVHYUe5/xMMtj2wqsgtL/ASpQJ2NmJ4NbD5Z6ioXuBrjQzPWqgSGi8lU
-# FH/jX944XEDmitLrQjo/EYCNgRihggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCADS5rF9GUH1H3Xxq0KeIJ007+KBd587LtE/JCJmBVv
+# DjANBgkqhkiG9w0BAQEFAASCAYAkJwnOT92gJUW7dM1mEgV2FBJL9215SxcZQct+
+# CnH+hshf2Mr+P5S/B0TOAsDs2x9WkG2OCDQGV1AWFrs8zQfxUbNDOZfJXput++9N
+# aVq3tPuf//S7wbq26XHfIYa2hNn6R8GKAb3bV159iZxcxo2zo9MIQZ9xSdJzqxzT
+# 8XC6XO3+79/12XpK59z6yjixtP4D1aaCvAdJm41QO7bXS8Ja2rPaGXzZxzEr2atZ
+# IEQ9BiZ/c+Eg5Ch7vAMZIK57al2wPvaq5taDe9LBItkkB0eo5aGsnauS1vnmZz0t
+# JseDLFcfC0nB6/9Rt3JPMRnwTlEe4cMcJ9UWw2OyPtrGL8BOOR5cv8HI1BjuZKkM
+# P5aBg9fgV8O3JfQIIo3/862OjFubDHmHZe9loDMs4xCQrxTabwLCcrjMUv0pHyDC
+# Nau57y2rLqFEHWAUUShEOk+ZvDGAG2icwZb8AGcys2rohD842TY6JXE77Hm00ar+
+# hAsVpuoGJjn6OWhlIilE7Ep5goGhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTQxODQ3MjNaMD8GCSqGSIb3
-# DQEJBDEyBDBCVm7mHO6GqNRrJF/XnIJiqEzOQ3VucX64qA+adH5HSan2v8yX1yvs
-# hctw8+X1AyYwDQYJKoZIhvcNAQEBBQAEggIAqT7y13iPcRUCJi+GwkifxbGq+w+e
-# T5ilUHW+G5R0wba1Ats4GSr3qkHftn3nVgRktlIMesjUjBNjRa7TSkCnv7o/IN4p
-# PvGK/oxBdk4mi9VjozPXvtyfNxQCOAR3j+ZEpQnj29HFLIuOKcFr8QBFUBjR9Qez
-# 4mqz0MASATWoNCYz+C6K+NgatwWYrQM0Ou68CuDHUYN56kdZGHDQ59mkkcGsltrI
-# fETH95bo/LPEr8g/Wf5DKGKYJsGltUSa6X8JDatmwqpkuz5mGfA6Sz6GNuA32h74
-# FcBRaByMpS9YxVniyWkRnQpVh7MAohvg2pixLuufq3X6r1qz7Pt5JGNTKsr+o1T+
-# tNafdTrhvYY96PsqrGgTb69bbnawkGMAfuKD27mwNtM2u6F7ghrIlh4GPb/7K6yA
-# Jvyyv3vozAy8Npei64aGfHCuneoEoNNnehFpR33obF9UC/SMZk1ekaK+mTOUiRfO
-# leFrOl92KikRSGohapk/AStoljk0IjfAMpn9BX4lhTCCpgk5JYEtf9/9d3YYlDQv
-# 1p/uZN2ZiPs8BoDw/URwVqUC7PrOlQkUFLTZavQ0Rm8WbetWQgiN45lP1wZMv/Qs
-# bMd0MgRj8zGUuEiAg0T5RUad0VTVE0tpLsYOO3d5RaPn7WLsSzKFslfZVthvIfci
-# i3Bw+C6KxKmaR+o=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTQxODU2NTVaMD8GCSqGSIb3
+# DQEJBDEyBDBWalJ/igV74toRJbo9MGKDcqB9SZYwCQuatl1F0mNCZSXvcNE4GCFC
+# D8X63znNoOAwDQYJKoZIhvcNAQEBBQAEggIAW8PqprtnBlANv70pKjliRaAZYfJw
+# n450W/HDhUhvLqw46tME4a2TvRtO2H3vBBUgd6fz8CeKt4osHZNK6VzLqcLFWWQT
+# wTw/MITnUuffsK2HGyjbVjF9YYvLBDrlDYYlBCmqppwYq2aVdbsRoZGqdnAs9vs7
+# n8CxFAnrkqkeCtdKOVqBbIu2ze8E0Bs4IBQHQSy+4wt2BgdutkXfgs1dC6Ih7u6K
+# 5rgZDj0LuYvQ+d4tL7vIeTxcAzm1U27XBsyBi8bq/EMYzdfBTXrURiJ8Igjdq4ze
+# j4yL+427+4lzUJJwFQFrcUbAS8kqlyl7VLrnMwH40jJQOSUDNo3vNE3vpw870SGG
+# 18g7VlDAtCEhbRq9gdk48/V7tVo6dx8ceao2Ggq7CwqukYMBxinrexGTU6BM792Q
+# 0JC3+/56H4xi6X9ZBAvBJbLOrfGU0MXhQ9lSg51CJ1UA1R5jPCkMOSWjtT/cuu+W
+# NXYSgKbE4mJHg6bik27IEyP1gQDbJr+jLB93KHpPid+cctFcxLDmdMQ4wZxSzTuB
+# cQwKxolrERwhPmMDsBGCNxxOumV5J7fZTuPf2PoZwOszh0M2BwlDnqLgfAXQ/0/h
+# gLRqE0GqmFfL/dHH11C/tjEOl49gn2FOmxZIERcc6WDt16V7p/E4MffZFr1qlUu/
+# iDcyy20I/4HqaA4=
 # SIG # End signature block
