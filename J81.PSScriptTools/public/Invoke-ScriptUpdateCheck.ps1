@@ -31,7 +31,7 @@ function Invoke-ScriptUpdateCheck {
 
     .NOTES
         Function Name   : Invoke-ScriptUpdateCheck
-        Version         : v2025.815.2145
+        Version         : v2025.815.2200
         Author          : John Billekens
 
     .LINK
@@ -112,8 +112,11 @@ function Invoke-ScriptUpdateCheck {
 
     # Script determines its own context
     $scriptFullName = (Get-Variable -Name MyInvocation -Scope 1).Value.MyCommand.Name
+    Write-Verbose -Message "Script full name : $($scriptFullName)"
     $scriptPath = (Get-Variable -Name MyInvocation -Scope 1).Value.MyCommand.Path
+    Write-Verbose -Message "Script path      : $($scriptPath)"
     $scriptRoot = Split-Path -Path $scriptPath -Parent
+    Write-Verbose -Message "Script root      : $($scriptRoot)"
     #endregion
 
     #region --- INITIAL CHECKS & MODES (Rollback/NoCheck) ---
@@ -242,8 +245,8 @@ function Invoke-ScriptUpdateCheck {
                 }
             }
         }
-
-        $downloadUrl = ($releaseInfo.assets | Where-Object { $_.name -eq $scriptFullName }).browser_download_url
+        Write-Verbose -Message "Release information retrieved successfully."
+        $downloadUrl = ($releaseInfo.assets | Where-Object { $_.name -ieq $scriptFullName }).browser_download_url
         if (-not $downloadUrl) { throw "Could not find asset '$($scriptFullName)' in release '$($latestVersionString)'." }
 
         $tempPath = Join-Path -Path $env:TEMP -ChildPath $scriptFullName
@@ -293,8 +296,8 @@ function Invoke-ScriptUpdateCheck {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBbWuuWY6OdFeqX
-# pQ4IPjJuYKj5Sou6OCHkTibylG9ZvaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC4uSeCb98klHr4
+# +TY8NPrds4nzKuD2x15uYWQVGH5E26CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -470,31 +473,31 @@ function Invoke-ScriptUpdateCheck {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCDig4xQcgGkSvz1ISN9gSsvGpjvfcbykr3BD3y7yn7V
-# sjANBgkqhkiG9w0BAQEFAASCAYBBr2yp+s8ZlBp8NpRris5rVV8jqbRDpCu5HjZX
-# RGwEbmPSHkTdp9s8/dhSqS5Ff5h/5hABL59bibwkqjXyXTnizJg/PjQ5rEh5KM4z
-# VXYMUI0X6r0n9jF50VF255TJfZ9ttwi+9Bzgpf2R9dhPZJ+F9c29uMmVs7pO9Th/
-# j5TcYmYNUIkKHFYAp7FGk25ZocSEngz85zRuCZav5AbI2PiuDyxZD/+Jnhe1jrSo
-# NLZLfqehH/9dKgsBMxnn0w17SS6Uc++4Mfg0nRxykaHZMcH+0E3pOa8beO3wgNpc
-# 98z7LK5PnhoXJZsJw1+XV71jHWp6mfl+tWbzvyqOW42K/JayXBdxSFnfrgtk2w7V
-# Ex6CVUGyxc1pqb61rQ+/YgdJKzDZ+G0xDeRVcorGvMsjUVtv7gHgOFIcYUACaAyg
-# pIWXSqCOcPLhyuFikff8kNZwlh+Dlho1ck/CvnTQ43bnmBdfUKZ53hcMX8zNmigX
-# SANR0tY1Wb9nx/zWFwmmNNpeocihggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCC+pAqYycLsRWF8VX3l8NWV/i5AnlvUP/0P53hfzcCc
+# 3jANBgkqhkiG9w0BAQEFAASCAYA65jWui3RCibHPIMxidM3shgs/p/VUSFVD09Dj
+# A3Vgg7K9x16PZePdaEvPDWNJcAg+F6eL09By98exRCgpnilSDo2PIOYnNgV7VKFm
+# l7AQ06XwI804YgaHaFdLrPDQU02M0545/kuJHySyWD67uM5NMUL2dW+Obd1atQHx
+# XyndZ5Ra6BFPTmpCaZGXddwTpBQubJSNdnFIggRiRYVG9ZGfNRgo74GHs/NNmOCM
+# OFngwSe54T7aZdmZW8cHOscnOwO0A/PNp9ISkhAg6HXyilQsKZ+nh1jJ0yOoxNaE
+# KR/3gdzsmZw/6/6PJe5NU9jJide3VUx3nlB/VlStcuHB++Z5w+6ovCpva5LbWQJP
+# MYPcQjrGaw/bQLeg1GefiST1uxW/sQ4BOHlVQeJZg+K+KnVxopnNf3w+ZaoSkh7D
+# g5GoyGW69fHqeE7SuKUa9M8wdT/b3fRSu9XlPmvhsqV2HksY4rN1HleCRuW9tmbx
+# qXJSf2UkdQfFdTgOe+tp9nRbKduhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTUxOTUxNDdaMD8GCSqGSIb3
-# DQEJBDEyBDAafaaNcc3j+bSvCdN5S/j/IkvNFoMmzma94FAUzrxKhnVRrMAHlfQo
-# C/zuln+J6I4wDQYJKoZIhvcNAQEBBQAEggIAu/BTHj4pFdQ/aANcuqy9P9JWRx0C
-# RL8mGtMVTfdJufZn/1ThnVmm0fOUAYphaj0M7XpQac74+qoj0sUsW/PS7EZbRg9s
-# h0o8pK2RYPk9lwMv0yt/NqdddOpqPoZ3rCDiC6kHKahhqO6qXpfCjFtUx3gA0m4u
-# dFvWZTCCxM2yQl7QH+YL26pbHEW/em1WezL3qcbW84QjqccJK8M0NBnahXPLn3LG
-# JS5L4kfkDrLvNtpFvfXuf7/HR9Sjf8VMAv+GvyQgbE/ab12wx3VAxp8uTB/TtdQH
-# M6bfu2tb/7nikti4tgTu1DyfOELY9XeJF0kRR33ijdAcF5zMNUQz2+M9zNNPSiYw
-# I59Fx7M3m3adScfPcc2GF0fyKZTxWNSu8hfyEVfNlDhHRDmK0OeVNW/GhuyDcb2H
-# PSp6hfJmUwfRkID+yYkwjqq5qftIAafyfJEPt3pBrVXPKAkOgRM2H3zsq/RQI446
-# mYxsUScLAe9ZP3M5CzSQRIHhjhvq3coDv4rYBpmztF3+ii1OgWFfIb49lP2HeIJ3
-# jXmsglRksVZuI7/tbQdVeRA5sxn1wmCG7tjal4fQYJRtLrPHTQ44zQBemI+tzpVI
-# DQWEzChUABIeFxJlU4iV6ZxInbaxJfBBY6Ef1j9gs1I4RVG/PNExAKBXR5IveQF7
-# 60Vl1VmtwFn2LUo=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTUyMDAwMjRaMD8GCSqGSIb3
+# DQEJBDEyBDBXkvx6nRu7DN3gPWUDRWY3cx2Ps4k4ZcHEyuPuR/sfTCXPWMpbGOIQ
+# 5s8MSv1t5q8wDQYJKoZIhvcNAQEBBQAEggIAA2PFFrUxgAdUh4UEmIxCwveFcy1M
+# 7A5Vng0g+LK9wdnsk1Da/FdM/naD4kmPdecyxtlVcVUE0n59eXslgf1oR9OcCzjg
+# vG7qRNGh3c8rBzA3nRq/exoKd5UacQXrVyWUoCjPcLycg2qcYNbFUCDpqbCU+Y39
+# FSPK2BkchtAuJPr/dLaTq4+M4l9G8S067E66qMj/3rCStxM/0a8CrB5ttJPGuzYi
+# rJlS6BDpzVmlf2YhCh4HFVZuonHsfpBkRh0bRfMTtsjIP85oAIsziBNNLcOVdn/I
+# 8I2jUUibsb4XBtc1efPvSTPGQRFjWhP4sp2YeTC+2fHAb1YnHZBJYq+nDimWVB3d
+# 07NZFVM5QFbQPmlNTOP12ZEEfzklxXNRlvPOVmiK8cdrT3PraNRvXWBIfLzXE+P8
+# 1z9GZxBn55uEt3ijvU6kmInSgyNcKwDk5zS3UkP3JEv8sDwen/xuYcdGhEo4yOBN
+# gZmkd1Js78Ju5NZu93dUNZVf57ho1pRJjOnyyfV+XaoBKUppB9QyC3YAy/Foalaa
+# KM8LG46l2rHNd3skpO7Ti+Gvk+YCDBccUes76OzmbmcPSGJvlU7rcqxUGrlFmHnL
+# 2DUxTE8VcArcZiMWIyUBlZP9TdiniOwyq8UPKgoj4766u10aIaTcCmzCg+6cFgfz
+# 4BNkhprYexFvkJ4=
 # SIG # End signature block
