@@ -31,7 +31,7 @@ function Invoke-ScriptUpdateCheck {
 
     .NOTES
         Function Name   : Invoke-ScriptUpdateCheck
-        Version         : v2025.814.2115
+        Version         : v2025.815.1130
         Author          : John Billekens
 
     .LINK
@@ -88,7 +88,12 @@ function Invoke-ScriptUpdateCheck {
         [Switch]$Silent
     )
 
+    #region --- SETUP VARIABLES ---
+    $script:Silent = $Silent.IsPresent
+
+    $SourceName = ""
     if ($PSCmdlet.ParameterSetName -eq 'Github') {
+        $SourceName = "GitHub"
         if ([String]::IsNullOrEmpty($GithubOwner)) {
             Write-Error -Message "GitHub owner not specified. Please set the `$GithubOwner variable."
             return $false
@@ -104,9 +109,6 @@ function Invoke-ScriptUpdateCheck {
         $jsonUrl = "https://gist.githubusercontent.com/$($GithubOwner)/$($GistId)/raw/$($GistFilename)"
         Write-Verbose -Message "Using Github URL: $($jsonUrl)"
     }
-
-    #region --- SETUP VARIABLES ---
-    $script:Silent = $Silent.IsPresent
 
     # Script determines its own context
     $scriptFullName = (Get-Variable -Name MyInvocation -Scope 1).Value.MyCommand.Name
@@ -213,7 +215,33 @@ function Invoke-ScriptUpdateCheck {
     try {
         $releaseApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/releases/tags/$($latestVersionString)"
         Write-Verbose -Message "Getting release information from $($releaseApiUrl)"
-        $releaseInfo = Invoke-RestMethod -Uri $releaseApiUrl -ErrorAction Stop
+        try {
+            $releaseInfo = Invoke-RestMethod -Uri $releaseApiUrl -ErrorAction Stop
+            Write-InformationColored -Message "Successfully retrieved release information from $SourceName." -ForegroundColor Green
+        } catch {
+            if ($_.ErrorDetails.Message -and ($ErrorDetails = $_.ErrorDetails.Message | ConvertFrom-Json -ErrorAction SilentlyContinue)) {
+                if ($ErrorDetails.status -eq 404) {
+                    Write-Host "Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message), trying again with alternative option..."
+                    $releaseApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/releases/tags/v$($latestVersionString)"
+                    Write-Verbose -Message "Retrying with URL: $($releaseApiUrl)"
+                    try {
+                        $releaseInfo = Invoke-RestMethod -Uri $releaseApiUrl -ErrorAction Stop
+                        Write-InformationColored -Message "Successfully retrieved release information from $SourceName." -ForegroundColor Green
+                    } catch {
+                        if ($_.ErrorDetails.Message -and ($ErrorDetails = $_.ErrorDetails.Message | ConvertFrom-Json -ErrorAction SilentlyContinue)) {
+                            Write-Error -Message "Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message)"
+                            return $false
+                        } else {
+                            Write-Error -Message "Failed to retrieve release information from $SourceName. Error: $($_.Exception.Message)"
+                            return $false
+                        }
+                    }
+                } else {
+                    Write-Error -Message "Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message)"
+                    return $false
+                }
+            }
+        }
 
         $downloadUrl = ($releaseInfo.assets | Where-Object { $_.name -eq $scriptFullName }).browser_download_url
         if (-not $downloadUrl) { throw "Could not find asset '$($scriptFullName)' in release '$($latestVersionString)'." }
@@ -265,8 +293,8 @@ function Invoke-ScriptUpdateCheck {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBEbWp6/cyo5koj
-# CiBzeFzTrpN6ueXqECnwdxyq1D1GAaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDJpaQnD/v4biK9
+# xO4B+j55U7m0BKWDTjsph3G30LZHuKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -442,31 +470,31 @@ function Invoke-ScriptUpdateCheck {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCA6QmdqZH8t76lDc3/3d7fzpyh2ieyqX8IN1nxuwrCA
-# HzANBgkqhkiG9w0BAQEFAASCAYAqKU5EfXsIQrmzeZKD0sdH9eGyoHKlORWkj+3N
-# GySGTGnMMfigUi6pAa8dCNSDaPheUZ8Vrg1a3feoXGFYgleZtgn6lZieA9+0YDSt
-# 28B+CEzVyEqueoqMMXzM66c0edZe+Tt0cPOhKbF098SdLsTeCiP2U27BkhJNAVHX
-# O0iVdakwV4nDe5nnyhQre5oNgw+qgwhK2Jnj1DqN8BJf4leqv6KgDMGW/4JR3Cbe
-# bdA35ansz1/PKlnuQ8RCSAoFy1cjKJH9Y7Cs8Mn51qas0unGq4pDxDVu239i4Nss
-# meIjv6ZmGdRVKDE/t3atud57WiMepA9ewe3VJQJ3rscOzfCSqkWk0LzQ46SruLsL
-# G9riodwrsiXHERCc0adXUsVpTZV1qe7pZqGzc4YpbuxTDtNcoLV5qQykIUf/BR2m
-# S8X6XJYUfdX3DQkR23e2AaVeXHwVjxsErJfHmlA0YbsCGl539W0DKnunugVuFTUP
-# FRC76p30rUt0AihyO6V2nOHtTmWhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCAUlh9fg8Y51qdDrQD7jEhGRLSnS02rpKMRGKx+ACDv
+# 9TANBgkqhkiG9w0BAQEFAASCAYBWh0/qqWgcJh8EnlOI5mNOkfLatXb6NZI4Nr+A
+# ktl+OuZbEOB1GpVFTHF3g13aUXEGVXLiINWJVdj9C6YC6oOmv6Ub3qjQbqiYsGwY
+# RsnDfby5w2Wd2EhPB1K2akR8E82HT0/XG0YwhymnGRzfZrsf8y0fb/F7+pcPeApn
+# wKPB6XHWMCFP/obQ/awp+iqtqYjCSucIC51qP0XgsFU4TxxgVEeV7pK9/jgMRgQH
+# jWI1Nebcy5vameoScdDqkXXoW/aZorsWu3b9PUNY1WSGo8bTE8E4PUOnoYAFIzt5
+# aET9bJiZ1lRuW12/+962raxEQuuB216x1PSUlBTSUcxlCyINlBYjjqx1E6LoWrM6
+# sdy6Hkr6RbQuyqBYLQt4VcR9oxPQa8uwYkmXgX9gVZ/fbnI22PtxuJ7s1frwLQ1V
+# KvKwq/3tutyxfndNrj4s9/rGRPAgmLo4xwFnmY0yhJwv7T8l1fBYC2IoYamgG+Zt
+# mFdZxsHNnIJjNbE2FToLxV8gLhShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTQxOTIxMDZaMD8GCSqGSIb3
-# DQEJBDEyBDD+jrp3BTJIWrC+8A/Kjt9+9SKohNEoEN0oCQvCz7/tqu1gLl5bUshO
-# 7H44GLn2d3IwDQYJKoZIhvcNAQEBBQAEggIALgsXyLu3G7pGOeGvlTFnFeg72QUI
-# gHrunG/yf65dLUlijg0izjhv/OQ+BoCOVEipz65aMOEx/4eyjbRdzaD3cOdtBX0p
-# D4Op/oHUkb4D95uRh7Az/Zdy+oqsA7JPC2ZFpZ2HAZXUdkw8E3qsnBmLMZhWsqoZ
-# T+bYcjPms5ePDhYBvM4Rb6BHgZNVXnUg2E41fZ0f5zh19qsgsEu+pjU3qehPrDLp
-# lZ+cTY7bl2XodYhD7buRTZdei0BLtnCAgAzvT5R94zU4n0k07QNvjqgg3sco9sJz
-# uXPG7k2ltbVGxUKaeMog7c/wr6hogXl0otD/DVOusvGscJhKCdJ460RXsxRlsiZn
-# Wz86+YNBmeYOs5+6IJnWk/pfkwPr5dP3T+jcmfV8guJoOQqoFP3PLqJBuXG0TAYP
-# BpRhEqfQUUEpEkNSmPI5OKQHk5fmkLDXNvCEQNZPe5WTnBT7d7STXQ25Qu/8hX1K
-# JOuK+jvWEErWi3LNLk2gLSDyiI8FQRiDJ1NIMKVRIQs8Ly3chkzIHzVBbRs56sNW
-# MpYBNweqgdm1bNzzFQaNLtGG/tEQ2dOblwKNaVLiuHNmyzeOGx/IpZMlVuF2Aofg
-# bJoafoRQVE3y9rSa8lqN+k0fblYel+Xg1FEl5t7hfdkzmqAlagJSup5qbfv5ObWL
-# oBaF7VLQoHWmqZQ=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTUwOTMzMTVaMD8GCSqGSIb3
+# DQEJBDEyBDArihVmbmi+gZiHx90f4UD09nvYJV2zTi29Ujs06xLB53YkNv+Zh9GU
+# MJmZc0H4XOYwDQYJKoZIhvcNAQEBBQAEggIAjTbFii6D7VUQclhrswbA/AtCCpoV
+# Ce9YogAApNih3rmO+xF0pw5oUOU/BOgmt9oSVJju0QWdAG/xEUbYvcyZb+wWVpfp
+# 3ePsloBraukRG6OUWnj1xONjvyvgSi63+hV8W1SfpvjWFWujuB5pRzjdw1KwG65Q
+# z3m45C8qYfFXAMfaiepnRwvHNd5IYMbq2hO2nyTq8g2RfcFYmcwky0IKTAcB4j7K
+# iU4sxDpW5+ulTBx7Go2VUAv+tjT7/e5gE83yB9mpaepaYFcUJqog6+Ez8Vrp/GrS
+# YJQMjA3hZDpbzIy9SgS7kdntH0VB6UfxP7x9IAHY10WoBmaKjHRATQjZc7sqDkts
+# 3MjSD2tBwo/ErLVgaO1w8A4IZURQIBXHz6yYy4rWl8FiAR6usfcO1BNa7l5XA5UM
+# d4tnZaRvZKpZdWQYWSZolmvOx0GW5w+lYV8qK6oSEMgvzfMNaXAVtfLjiZAH2xbv
+# DrLTtRD7s4CVywsqgfF94eFY1+H6MQmFH5DyjuQsdCBTeJOoiQ88nRBqs9ptAUro
+# qTZkD7nuCmlsACysYdeis2uSmdM3YcacQPIq+xqM7yWdfSy2kLi3t+7DZn4KwFi/
+# vvei4J9i1lr3hXRR7b4b8ZyX6k+Ypwz9CiJubRrbu+ZJrveh7CBwvh9FA8EDnTNk
+# lIS80BT6kLmQDHU=
 # SIG # End signature block

@@ -1,93 +1,219 @@
-function Get-GitHubCommitDescriptionByName {
+function Publish-ScriptRelease {
     <#
-              .SYNOPSIS
-                  Retrieves the full commit message/description for a given commit.
+.SYNOPSIS
+    Automates the entire release process for a script based on the current Git branch.
 
-              .DESCRIPTION
-                  This function fetches the commit details from the GitHub API
-                  for a specified owner, repository, and commit (SHA, branch, or tag name).
-                  It then extracts and returns the full commit message body, which often
-                  serves as release notes.
+.DESCRIPTION
+    This function prepares a script file for release by setting its version and signing it using the
+    Set-Signature function. It then automatically determines if the release should be a pre-release
+    (if on the 'dev' branch) or a stable release (if on 'main' or 'master').
 
-              .PARAMETER PersonalAccessToken
-                  The GitHub Personal Access Token (PAT) used for authentication.
-                  It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    It then creates the corresponding tag and release on GitHub using the GitHub CLI, and uploads the
+    signed script as a release asset. The script will automatically search for gh.exe in common
+    installation paths if it's not found in the system's PATH.
 
-              .PARAMETER Owner
-                  The owner of the GitHub repository (user or organization name).
+.PARAMETER Version
+    The version number for the new release (e.g., '1.1.0'). Must be specified.
 
-              .PARAMETER Repository
-                  The name of the GitHub repository.
+.PARAMETER ScriptFile
+    The path to the script file that needs to be released. This parameter is mandatory.
 
-              .PARAMETER CommitName
-                  The name of the commit to retrieve the description for.
-                  This can be a commit SHA, a branch name, or a tag name.
+.EXAMPLE
+    PS C:\> Publish-ScriptRelease -Version '1.2.0' -ScriptFile '.\GenLeCertForNS.ps1'
 
-              .NOTES
-                  Version       : 2025.815.1130
-                  Author        : John Billekens
-                  LastUpdated   : 2025-07-05
-                  Compatibility : PowerShell 5.1+
-              #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
+    Creates a stable release for v1.2.0 (assuming the current branch is 'main').
+
+.NOTES
+    Function Name   : Publish-ScriptRelease
+    Version         : v2025.815.1130
+    Author          : John Billekens
+
+.LINK
+    https://blog.j81.nl
+#>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    [Alias('pub-rel')]
     param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$ScriptFile,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
+        [Parameter()]
+        [string]$Version,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName
+        [Parameter()]
+        [Switch]$UpdateSignature
     )
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
+
+    begin {
+        # --- Initial Checks ---
+        if ($UpdateSignature -and -not (Get-Command -Name 'Set-Signature' -ErrorAction SilentlyContinue)) {
+            Write-Error -Message "The 'Set-Signature' function is not available. Please make sure it is loaded into your session."
+            return
         }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
+        $ghCliPath = Get-Command -Name 'gh' -ErrorAction SilentlyContinue
+        if (-not $ghCliPath) {
+            Write-Verbose -Message "Could not find 'gh.exe' in your PATH. Checking default installation directory..."
+            $fallbackPath = Join-Path -Path $env:ProgramFiles -ChildPath "GitHub CLI\gh.exe"
 
-        $fullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($fullCommitMessage)"
-        if ($null -ne $fullCommitMessage) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $messageLines = $fullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            if ($messageLines.Count -gt 1) {
-                Write-Verbose "Commit message has multiple lines. Extracting body."
-                # Skip the first line (subject) and join the remaining lines to get the description/body
-                return ($messageLines | Select-Object -Skip 1) -join [Environment]::NewLine
+            if (Test-Path -Path $fallbackPath) {
+                $ghCliPath = $fallbackPath
+                Write-Verbose -Message "Found gh.exe at: $($ghCliPath)"
             } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                return $messageLines[0]
+                Write-Error -Message "GitHub CLI ('gh.exe') could not be found in your PATH or in the default location. Please install it or add it to your PATH."
+                return
             }
         } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
+            Write-Verbose -Message "Checking GH auth status..."
+            $ghCliPath = $ghCliPath.Source
+            $ghAuthStatus = & $ghCliPath auth status --hostname github.com --active
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error -Message "GitHub CLI authentication failed. Please ensure you are authenticated with 'gh auth login'."
+                return
+            } else {
+                Write-Verbose -Message "GitHub CLI authentication is valid."
+                Write-Verbose -Message "Auth status: $($ghAuthStatus | Out-String)"
+            }
         }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+    }
+
+    process {
+        # --- Step 0: If Version is null, check file if version can be extracted ---
+        if (-not $Version) {
+            Write-Host "No version specified. Attempting to extract version from script file..." -ForegroundColor Yellow
+            try {
+                # Read the script content
+                $scriptContent = Get-Content -Path $ScriptFile -Raw
+                $regexScriptVariable = '(?m)^\s*\$ScriptVersion\s*=\s*(["'']?)(v?)([\d.]+)\b.*$'
+
+                if ($scriptContent -match $regexScriptVariable) {
+                    # If $ScriptVersion variable is found, extract its value
+                    # $Matches[2] will be 'v' or empty
+                    # $Matches[3] will be the numeric part (e.g., '1.2.4')
+                    $scriptVersion = "$($Matches[2])$($Matches[3])"
+                    Write-Verbose -Message "Found version '$scriptVersion' from `$ScriptVersion variable."
+                } else {
+                    # ---
+                    ## Regex for Notes Section Version
+                    # This regex looks for the 'Version:' line within the .NOTES section of the comment block.
+                    # It accounts for optional 'v' prefix and extracts the numeric version.
+                    $regexNotesVersion = '(?s)(?i)(?<=(?m)^\s*\.NOTES\r?\n(?:(?!\.PARAMETER|\.INPUTS|\.OUTPUTS|\.NOTES|\.EXAMPLE|\.LINK|\.COMPONENT|\.ROLE|\.FUNCTIONALITY|\.KEYWORDS|\.SYNOPSIS|\.DESCRIPTION).)*?^\s*Version\s*:\s*)(v?)([\d.]+)(?=\r?\n)'
+
+                    if ($scriptContent -match $regexNotesVersion) {
+                        # If version in .NOTES section is found, extract its value
+                        # $Matches[1] will be 'v' or empty
+                        # $Matches[2] will be the numeric part (e.g., '1.2.3')
+                        $scriptVersion = "$($Matches[1])$($Matches[2])"
+                        Write-Verbose -Message "Found version '$scriptVersion' from .NOTES section."
+                    } else {
+                        Write-Error -Message "No version number found in script."
+                        return
+                    }
+                }
+
+                # You can now use $scriptVersion
+                Write-Host "Determined Script Version: '$scriptVersion'"
+            } catch {
+                Write-Error -Message "Failed to read the script file: $_"
+                return
+            }
+        } else {
+            # If a version was provided, use it directly
+            $scriptVersion = $Version
+            Write-Host "Using provided version: '$scriptVersion'"
+        }
+
+        if ($UpdateSignature) {
+            # --- Step 1: Prepare and sign the script file ---
+            Write-Host "Preparing and signing '$($ScriptFile)' for version $($scriptVersion)..." -ForegroundColor Yellow
+
+            $signParams = @{
+                FilePath                 = $ScriptFile
+                SetVersion               = $scriptVersion
+                UpdateCertificateSubject = $true
+                Force                    = $true
+                ErrorAction              = 'Stop'
+            }
+
+            try {
+                Set-Signature @signParams
+            } catch {
+                Write-Error -Message "Failed to sign the script. Aborting release."
+                return
+            }
+        }
+        # --- Step 2: Create the GitHub Release via CLI ---
+        if ($scriptVersion -like 'v*') {
+            Write-Host "Version '$($scriptVersion)' already has a 'v' prefix. No need to add it again." -ForegroundColor Green
+            $tagName = $scriptVersion
+        } else {
+            Write-Host "Adding 'v' prefix to version '$($scriptVersion)' for GitHub release." -ForegroundColor Yellow
+            $tagName = "v$($scriptVersion)"
+        }
+        $targetBranch = (git rev-parse --abbrev-ref HEAD).Trim()
+        Write-Host "Current branch is '$($targetBranch)'. Preparing release with tag '$($tagName)'..." -ForegroundColor Yellow
+
+        $ghParams = @{
+            tag_name = $tagName
+            title    = "Version $($scriptVersion)"
+            notes    = "Official release for version $($scriptVersion)."
+            target   = $targetBranch
+            files    = $ScriptFile
+        }
+        Write-Verbose -Message "GitHub release parameters: $($ghParams | Out-String)"
+
+        if ($targetBranch -eq 'dev') {
+            Write-Host "Detected 'dev' branch. This will be marked as a pre-release." -ForegroundColor Cyan
+            $ghParams.prerelease = $true
+            $ghParams.title = "Version $($scriptVersion) (Pre-Release)"
+        }
+
+        $argumentList = @(
+            "release",
+            "create",
+            $ghParams.tag_name,
+            "--title",
+            "'$($ghParams.title)'", # Quotes needed here for titles with spaces
+            "--notes",
+            "'$($ghParams.notes)'", # Quotes needed here for notes with spaces
+            "--target",
+            $ghParams.target
+        )
+
+        if ($ghParams.prerelease) {
+            $argumentList += "--prerelease"
+        }
+
+        $argumentList += $ghParams.files
+
+        if ($PSCmdlet.ShouldProcess("GitHub repository", "Create release '$($tagName)' and upload '$($ScriptFile)'")) {
+            try {
+                Write-Verbose -Message "Executing: $($ghCliPath) $($argumentList -join ' ')"
+
+                # Voer het commando uit
+                & $ghCliPath $argumentList
+
+                # Controleer de exit code direct na de aanroep
+                if ($LASTEXITCODE -ne 0) {
+                    # Genereer een PowerShell-error als de .exe een fout gaf
+                    throw "gh.exe returned a non-zero exit code: $LASTEXITCODE. Check the output above for details."
+                }
+
+                Write-Host "Successfully created release and uploaded asset." -ForegroundColor Green
+            } catch {
+                Write-Error -Message "Failed to create GitHub release: $($_.Exception.Message)"
+                return
+            }
+        }
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCYMcpN/WQ4R2RY
-# jY9CubEfpFMF7rreeyBi8n0EJqVoqqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBfc/IO/fG7nhDm
+# 5JOxfCA0QO+rr/w1qX0sU1pmyvfz/aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -263,31 +389,31 @@ function Get-GitHubCommitDescriptionByName {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCBP99fQu7JIGSRHOJ3E4w6SiJdHVK4LFt8o9UblZaHe
-# vjANBgkqhkiG9w0BAQEFAASCAYBQFQ5r8mpApLvjxATvcR5GxlrBpfWyupNMDFtx
-# Oj6GcQDSTcfAOY33xqXgOEKhQsoSO9fHdbREzyp1kqBTq/owRewaAm58A++Gz0u1
-# NP6Zvp83mmz+KYXIcpsqHZkEkrkVAG2sdp55Ao+Ms3GncqTUJnK1W+7xZI/k/zyp
-# Amed4nvKOjwZ4QKTHZtzauJrmwlDV1OvFe48pxVYu3F143mQlhbMreEuuUaVDU7p
-# ZeTgwc/SFZ6jNZXVuYU2mwF9HaeO1li9vUwmmMne8vxTPJi5McnMUk6aGijuy6Hg
-# 2qhQOj4WyTSGoz5YzpdwsFmJogbHUCbqswqSMXXwy9hCiE+nL/QAveIk4tdq+6WZ
-# tNgyBP92UUocTJ0Y+DaDBSdyEEtSeZ10eUyUMKJj2Uv4mFgL3LItYzYNA2fWN23U
-# 2EmRtCHoqVIVDWS7y+F67lx7MIDrfCK818L0s2U8FFsmS7+ON+ojRIzxH3QWjPPc
-# ZEnF7zKcaM95rzlrGLAFRiy1aiahggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDMX4j29Sxptzxv3aepbbKwA14Qt4zSbEH+Air4/1AC
+# iTANBgkqhkiG9w0BAQEFAASCAYARY6BOq5v6GifZxIVBAJeqfm6aIUhTXsj/YkPB
+# xzV/IFJaXYdi5ySsynl+6ZrElloMFfrU3VSOiTxhC4TZcLtGxyNfVLrX74oasety
+# 6pw/V+Q+9qJqMWzq5M+SuZxR+llQ7t1dyizuRbd9sYWAhpb01LedeLMhh/wY4vM6
+# w1pCmI0KugUL9YWjR0mpkOdjCDFmpSrwoqrfT56D34/dDvB9+ZkAXhzadn8ucbg1
+# W2+wFJ10WrDKqS4/KAfjkJ43LcCps1iQBxEW4IkT2xbClRJml+q/jqrWz7ZcBmjz
+# YFeNO/1Fkmzd/5QkrMTcOZAXKMpYauxQBoNpBLy0WGvLLXzMv0oLnOkxVObRo4Wt
+# QirD1n5S/s/ZjvY3xFYokL2++21IMz+VVOt1PZ08BHTVpwbKOgsudos8/KW1aD5S
+# T/tJ7SpfPat32WhqJCK+NNmErR37nD5t5Jf9ePaYOxJw9M67fe5fUDVVurtkGu6i
+# fnQY580LTx3XmI0Svuw6mspREcmhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTUwOTMzMTJaMD8GCSqGSIb3
-# DQEJBDEyBDD2gA9XrsPfnwxqoLnEZmBtGIvGpfaZSgfD+/B9O0HyTu98GVJZnTEJ
-# Y2FMwTO++TwwDQYJKoZIhvcNAQEBBQAEggIATPpAgeMSLt2tz50UqYbWlv3jWbsS
-# 7GiyF9IObVJ4OIC0RSj1mQIPdVf6+awkk1HZNbEvnIiSSMzkUGZtf4OhGI8qd7Gs
-# RNLaQJG3E+xibev60GXm2eQwtql0lCl/+MbLaFQkfjMgAzonRVwFkFvwDbi6sotp
-# 6Gyu7TqxCb+Pv4q7+jknOJccR/UXah2bGbAHUtbY9/DKNzGW4Fa483z+O+4ObmMR
-# /VxiwXMXnetMNmcqk38zIwiwirExYi0yaa8CplIegdSJYlYFWBAiSY+aYWbvt2Qv
-# YBFUb7u2n/yo6MNPK0rdJKGU9RAYRgf1FdQTq0it2teqI5PhOv2PhIPGSYlrYdoo
-# VTv5NVLa3TRilfioenIghvOK9WNFAXgi8y2+WSEBLpm4nM+xiKPPyIZns7E9IX47
-# A5Xp5uR8qwnINo0TiwZeGJYAgHIa3UaVm8zqNOuQXwx80ztkAEE8MwlhNxB+GGLH
-# sf0L0iwgqz4z6TGj1NCEJYiaWBvdCIS81pyTOwWKpr8ZvZ23O34OaiK5ol91ehzM
-# CHB3biojqUSXBRdnOfDn1vP4TRA8btacvJ754Ggq8+n4z+uXbI7pY6xgwCYVMMDz
-# IXTR5YGdvZspRtP/izEnZMDuKQWxHB3py60bL6P27c7c3MtC4mHhjZVVJFTsYAPA
-# iWcjVXxZNYX2Qp0=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTUwOTMzMThaMD8GCSqGSIb3
+# DQEJBDEyBDDPZLWsiH7ykavxTfo0f7XcceIf7lsy+Ii8/G61kv84Jlh+YlQwQ3LW
+# JSlefdC+EZUwDQYJKoZIhvcNAQEBBQAEggIAikG/r5I0eDMiKhNIw/3sAhpQZlE7
+# o+mcApcD07n+bCgGMyxdrKInjnmDANKOxJrZ+9a10sRcm7M9Xk6WYM+J9aOtOFfc
+# weM39QwBRzc+CL5CKKIxiHPixNTP5+84HA94PoTOaXa6zAjakAg7o6OQkHEVtJiq
+# 1GVwt16/OIumWHtdn5gzC6LMPrwLxW4jCr0lnOkaNB5v6UA3Qqn9n5Fezcri74El
+# efdjnOe48YpID5hQhhcC+7lsQcc+vSfzpiVi0wH/oiICjOJqHuzCNRXMeXjPJJBi
+# FdopGdGwoCsT6zJcU1fGLp6a45FBEKK7UGohpoiz1KitcDlcadOYJySIxPYgtPkF
+# ycx4mwp7h/H2UZEbUoishSrmjoulnsvGOND+IlIZ98UMoIuPfMr67UW16MPcFuaL
+# TYhwrPHzicPHsLp71U2GRkk3HpibZs47sbJj0qwzk6iXojAYsRoqrzIe5fQdDT+a
+# vrOr1+d+LUKHH3HjavMMBN7fizpVabbDaEBg3vmL7IFAJltngIAgb2iPVcdYVCY5
+# iMepbWE4yuWvmE+wXWkURmjpKBxjrI/jTogd5bCnsQd/fBgCG6auODVKSDUj2tJC
+# JPiQier6jMTz5saShlELs3owRc2jBq5sWXjsOUG1ZY6OrxHv7kWjiSoywU37+xv3
+# U9bLjDg2TIWGcjU=
 # SIG # End signature block
