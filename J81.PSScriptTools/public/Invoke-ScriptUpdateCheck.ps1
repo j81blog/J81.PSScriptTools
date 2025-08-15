@@ -300,8 +300,7 @@ function Invoke-ScriptUpdateCheck {
         Write-InformationColored -Message "Restarting script..."
         $currentPSEngine = (Get-Process -Id $PID).Path
         Write-Verbose -Message "Restarting with engine: $($currentPSEngine)"
-        $restartCommand = (Get-Variable -Name MyInvocation -Scope 1).Value.Line
-        Start-Process -FilePath $currentPSEngine -NoNewWindow -Wait -ArgumentList "-NoProfile -Command `"$(& {$restartCommand})`""
+        Start-Process -FilePath $currentPSEngine -NoNewWindow -Wait -ArgumentList "-NoProfile -Command `"$(&{& "$scriptFullName" $SourceParameters})`""
         exit
     } else {
         Write-InformationColored -Message "Please restart the script to apply the update. The current running version is still $($CurrentVersion)." -ForegroundColor Yellow
