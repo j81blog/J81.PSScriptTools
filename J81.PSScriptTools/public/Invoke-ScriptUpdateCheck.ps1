@@ -111,7 +111,7 @@ function Invoke-ScriptUpdateCheck {
     }
 
     # Script determines its own context
-        $PSCallStack = Get-PSCallStack
+    $PSCallStack = Get-PSCallStack
     if ($PSCallStack.Count -eq 0) {
         Write-Error -Message "No call stack found. This function must be called from a script or function."
         return $false
@@ -269,15 +269,17 @@ function Invoke-ScriptUpdateCheck {
         $tempPath = Join-Path -Path $env:TEMP -ChildPath $scriptFullName
         Write-Verbose -Message "Downloading update from $($downloadUrl)..."
         Invoke-WebRequest -Uri $downloadUrl -OutFile $tempPath -ErrorAction Stop
+        if (-not [String]::IsNullOrEmpty($requiredCertificateSubject)) {
+            Write-Verbose -Message "Verifying Authenticode signature..."
+            $signature = Get-AuthenticodeSignature -FilePath $tempPath
+            if ($signature.Status -ne 'Valid') { throw "Signature check failed! Status: $($signature.Status)." }
 
-        Write-Verbose -Message "Verifying Authenticode signature..."
-        $signature = Get-AuthenticodeSignature -FilePath $tempPath
-        if ($signature.Status -ne 'Valid') { throw "Signature check failed! Status: $($signature.Status)." }
-
-        # The function uses the $requiredCertificateSubject variable from the parent script scope
-        if ($signature.SignerCertificate.Subject -ne $requiredCertificateSubject) { throw "Certificate subject mismatch! Expected '$($requiredCertificateSubject)', but got '$($signature.SignerCertificate.Subject)'." }
-        Write-Verbose -Message "Signature valid and matches expected subject."
-
+            # The function uses the $requiredCertificateSubject variable from the parent script scope
+            if ($signature.SignerCertificate.Subject -ne $requiredCertificateSubject) { throw "Certificate subject mismatch! Expected '$($requiredCertificateSubject)', but got '$($signature.SignerCertificate.Subject)'." }
+            Write-Verbose -Message "Signature valid and matches expected subject."
+        } else {
+            Write-Verbose -Message "No certificate subject specified for signature verification."
+        }
         Unblock-File -Path $tempPath
         $backupPath = "$($scriptPath -replace '\.ps1$', "_v$($CurrentVersion).bak")"
         Write-Verbose -Message "Creating backup of current script at $($backupPath)"
