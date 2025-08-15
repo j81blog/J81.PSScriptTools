@@ -1,135 +1,79 @@
-<#
-    .SYNOPSIS
-        Updates an existing GitHub Gist with new content.
+function Get-ExceptionDetails {
+    <#
+.SYNOPSIS
+    Expand an Exception object to String for diagnostics
+.DESCRIPTION
+    Expand an Exception object to String for diagnostics
+.PARAMETER Exception
+    The Exception
+.OUTPUTS
+    [String] Exception in String
+.COMPONENT
+    J81FunctionLibrary
+.EXAMPLE
+    try {1/0} catch { Get-ExceptionDetails $_}
+.EXAMPLE
+    try {1/0} catch { Get-ExceptionDetails $_ -Summary}
+.EXAMPLE
+    try {1/0} catch { Get-ExceptionDetails $_ -Full}
+.NOTES
+    Function Name : Get-ExceptionDetails
+    Version       : v2025.815.2145
+    Author        : John Billekens Consultancy
+    Requires      : PowerShell
+.LINK
+    https://blog.j81.nl
+    #>
+    [CmdletBinding(DefaultParameterSetName = "Default")]
+    param(
+        [Parameter(ParameterSetName = "Default", Position = 0, Mandatory, ValueFromPipeline = $true)]
+        [Parameter(ParameterSetName = "Full", Position = 0, Mandatory, ValueFromPipeline = $true)]
+        [Parameter(ParameterSetName = "Summary", Position = 0, Mandatory, ValueFromPipeline = $true)]
+        [Object]$Exception,
 
-    .DESCRIPTION
-        Update-GithubGist sends a PATCH request to the GitHub Gist API to update
-        the content of a specified Gist file. It requires the Gist ID, the new
-        content, the target file name within the Gist, and a GitHub Personal
-        Access Token (PAT) for authentication.
+        [Parameter(ParameterSetName = "Full")]
+        [Switch]$Full,
 
-    .PARAMETER GistId
-        The identifier of the Gist to update.
-
-    .PARAMETER GistContent
-        The updated content to write into the Gist file.
-
-    .PARAMETER GistFileName
-        The name of the file inside the Gist that should be updated.
-
-    .PARAMETER PersonalAccessToken
-        A GitHub Personal Access Token (PAT) with the necessary scopes
-        to modify Gists.
-
-    .PARAMETER Description
-        A brief description of the Gist. This is optional and can be left empty.
-
-    .PARAMETER Visibility
-        The visibility of the Gist. Valid values are 'Public' or 'Private'.
-        Default is 'Public'.
-
-    .OUTPUTS
-        System.Management.Automation.PSCustomObject
-        Returns an object with the following properties:
-          • GistId       – The ID of the updated Gist.
-          • GistFileName – The name of the file that was updated.
-          • RawUrl       – The raw URL of the updated file in the Gist.
-          • Url          – The HTML URL for viewing the updated Gist.
-          • Visibility   – The visibility status of the Gist ('Public' or 'Private').
-
-    .EXAMPLE
-        PS> Update-GithubGist -GistId 'abcd1234' `
-                            -GistContent 'Updated content' `
-                            -GistFileName 'example.txt' `
-                            -PersonalAccessToken 'XXXXXXXXXXXXXXXXXXXX'
-
-        Updates the specified Gist file and returns an object containing the
-        Gist ID, file name, and raw URL of the updated content.
-
-    .NOTES
-        Function Name   : Update-GithubGist
-        Version         : v2025.815.2145
-        Author          : John Billekens
-        Requirements    :
-            - The function reads the PAT from the environment variable PAT_TOKEN
-              if the PersonalAccessToken parameter is not explicitly provided.
-            - Requires Internet access and valid GitHub credentials.
-
-    .LINK
-        https://blog.j81.nl
-#>
-function Update-GithubGist {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$GistId,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$GistContent,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$GistFileName,
-
-        [Parameter(Mandatory = $false)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Description = "",
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [Alias('PAT', 'Token')]
-        [string]$PersonalAccessToken
+        [Parameter(ParameterSetName = "Summary")]
+        [Switch]$Summary
     )
-
-    # Define the API endpoint for updating a Gist
-    $apiUrl = "https://api.github.com/gists/$GistId"
-
-    # Create the body of the request
-    $body = @{
-        files = @{
-            "$($gistFileName)" = @{
-                content = $GistContent
+    begin { }
+    process {
+        $ErrorLines = [System.Text.StringBuilder]::new()
+        if ($Summary) {
+            try {
+                [void]$ErrorLines.AppendLine($($Exception | Format-List * -Force | Out-String).Trim())
+            } catch { <# Non-fatal error occurred while formatting exception #> }
+        } else {
+            [void]$ErrorLines.AppendLine("======================: Exception")
+            try {
+                [void]$ErrorLines.AppendLine($($Exception | Format-List * -Force | Out-String).Trim())
+            } catch { <# Non-fatal error occurred while formatting exception #> }
+            [void]$ErrorLines.AppendLine($("======================: InvocationInfo"))
+            try {
+                [void]$ErrorLines.AppendLine($($Exception.InvocationInfo | Format-List * -Force | Out-String).Trim())
+            } catch { <# Non-fatal error occurred while formatting exception #> }
+            if ($Full) {
+                try {
+                    for ($i = 0; $Exception; $i++, ($Exception = $Exception.InnerException)) {
+                        [void]$ErrorLines.AppendLine($("======================: InnerException - $i"))
+                        [void]$ErrorLines.AppendLine($($Exception | Format-List * -Force | Out-String ).Trim())
+                    }
+                } catch { <# Non-fatal error occurred while formatting exception #> }
             }
+            [void]$ErrorLines.AppendLine("=======================")
         }
+        Write-Output ($ErrorLines.ToString())
+        $ErrorLines.Clear() | Out-Null
     }
-
-    if (-not [string]::IsNullOrEmpty($Description)) {
-        $body.description = $Description
-    }
-
-    $bodyJson = ConvertTo-Json -InputObject $body -Compress -Depth 6
-
-    $headers = @{
-        Authorization = "Bearer $($PersonalAccessToken)"
-        Accept        = "application/vnd.github+json"
-    }
-    try {
-        Write-Verbose -Message "Updating Gist with ID: $GistId"
-        $response = Invoke-RestMethod -Uri $apiUrl -Method Patch -Headers $headers -Body $bodyJson -ErrorAction Stop
-        Write-Verbose -Message "Gist updated successfully: $($response.html_url)"
-        $rawUrl = $response.files.$gistFileName.raw_url
-        $htmlUrl = $response.html_url
-        $gistVisibility = if ($response.public) { 'Public' } else { 'Private' }
-        return [PSCustomObject]@{
-            GistId       = $GistId
-            GistFileName = $GistFileName
-            RawUrl       = $rawUrl
-            Url          = $htmlUrl
-            Visibility   = $gistVisibility
-        }
-    } catch {
-        Write-Error -Message "Failed to update Gist: $($_.Exception.Message)"
-        return $null
-    }
+    end { }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAPaDTr5f23W8dO
-# 2SQm6/xrUpXzt6IVLu4cpZ+kTNxEzKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB943uLOZ1FvYcI
+# bzJKfiHOyIxLPNaYnqahOtDEOhwFMqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -305,31 +249,31 @@ function Update-GithubGist {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCArC4nnqv/AnWZqBKieUmCmcZutcdX3JtGkmzyJpOEU
-# pjANBgkqhkiG9w0BAQEFAASCAYAU4/nuoyzo64nl292nmI4PNF7F/eEJ0ZeLM8+t
-# tvui7xNXpW6FXoRLlsNr7INCzzoYZhYL3t2NcmsGAJr430JEIRahjIzc6wzGyUA7
-# FKFaTHlDD0pZM1GTWF2QJgCVgMtBdUSUDUY/BwHIIa6Q/VbYUJP8+DcdlbWk+tKC
-# DaZhffbnN7dcoQTy5IuKdqCffoMVj+D8wVrZIHb2VQ6+KLd6FIxbSv/2DXScNqob
-# FLhjEvKD4IGjfEwvOc+CyR/xtb9zUNSbqLJ111fOXXj2CpYKkv2tKBmfAAl1AZra
-# eJvPLDoz6u3Fw0BPs17PQgj/BtEwbCDtxuiuwq4Dfcxhy2Gmr+UtzT/4BOEwJmXV
-# dA1Zp7B+beIQuJQ1gXzHrx+Uzgo4zZNXaLJXtx0kDMuMfPA0RV1Fbwdzlvz9bDd0
-# YnkP129FRVE5M++L7RXRGHD9mUzLfNcUgr6f8mwCf75jYPS8hbrmWxc81fj8XR/Q
-# 0cmMfVtEC+XjNrzLTkhIaYhwVpihggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDxRinXMbGIWnhfRQi+Y1LqZcVOYCaPK4UcuHlkeqWX
+# fzANBgkqhkiG9w0BAQEFAASCAYBCw/mg7i46GnL91sWZJ9AvB/Ns+Zxz5d8SjOLQ
+# zKBEC1X15xYBOPv4F76uTS4J7fVddDJZvsqaoMzj876uAH+qOxAUiAuK4QK2843J
+# 8WrG7nV26QropZlzT0GmKPxT44ShrSVJP4VjCa4iVEP7q6P7yvfAAQ0XYT91fWk2
+# KK9bEwe8UbmhegV5Yr3+Ci+ha/PiW/s0EMI3wLyzDfSkIzA+tXg68TqmWD8nZhCC
+# QCoL+BxHCxzc32AzCq/S/EMUOEWfWAKF2kSMRN8NBsg45/qNWF3WuCsaU1UH7l5t
+# +mE8GfMUBm7wj9uhJd/5GrDjga+h7Voh3ogOgCnheSTlsxx3dWjvNcuVkyqOdvHd
+# KAj2z8f1NaETqejm0DDnjwQH9X/j9NOivwPIOT8OEeHQkVTWrKqTzZOqANz8UgGG
+# 8WkzePeX2/ukmdAj1Y+jQEE9HEAxJLh1vMZ1Y2+soVebLIOkGRtd03qxPiA22Zv7
+# RqTH9kbmSDM/90UJbl63DJJSWa2hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTUxOTUxNTNaMD8GCSqGSIb3
-# DQEJBDEyBDBQgrRjUmtwhigiTXqi8+JyoEZfiMpZ4Ij0sQHi97znmJuaIkeOzriY
-# iMkEVXEXTr0wDQYJKoZIhvcNAQEBBQAEggIAm9bVl7cYN6B0JE31YG4Xy0wgOovI
-# hk6tjdKVb0FzMAKu64g2dIcIROO0UwxHP03b9RvN2oQyFLKS6A1vcpwF3gM3roO1
-# QYZhFgvEYPRGwd3oQ73r/CX4t4KBghqq9CRov8OwRhG9QG8vAc/uky8CeVlTw9nz
-# Qng4CbuOmdjcjei2mqMGdVKH+uWZAMmNXvtGUAGQUTJ+FVnclCpUavaANZgeoPjD
-# baAKQA3JDTVjivJqo0StYkR2MMshY/seZuaL2DRJfSDzIN7amV5aK5AEpeOiMWjF
-# 93Am+fmQyaWgO0hz8dhFuOWxwMrF9DcUOGwUlleJkWi+e+vl7eFz6cTQxYsoaaOU
-# fD12rsZMm40y8aifVzeglXBU9oRdxPfjQJxH+rICORKMv8CSxxW60I4rirnGbbmp
-# GOfZbBm8jZgv/vwA++GUHabqZX0ddgvpmEObe4usZQJm23Bzw6Nsmxo7xvMvFVYt
-# uv4d7PQqWvgKkcj/VKRSMENCGhCrZgj0xNfSXmXEP9r7LggAzH4myqC24XKZ/Bfz
-# 4vE/ltNXuBZEWQZlJjl1plug2n3xbZrzGQx1qGqy0eARWlJ8x71rvzsIZV3qLiba
-# xMX5rUKMa7+P/9DDepNPu2bvMF7pU/fm1xs8nbWLhtORY1714eutdiwTp1ZFPKB3
-# GYjeeCqW9QqPFcc=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTUxOTUxNDFaMD8GCSqGSIb3
+# DQEJBDEyBDBgP7ziut96ET03lXcwEanI6cqS+B7579dBpn+2KMCwr3rByI4dz56z
+# MRdq/GSXOAgwDQYJKoZIhvcNAQEBBQAEggIApc5T0G6t5OmerqcXG1e3amKpBh4l
+# fxZPq8+Lp0EdgrFGVSsaf3TuHtAnc9u3zag2uCxDa4Qa0xLqofhah2EUV97RQGQO
+# XOQb36meDoO2lEcncmygbZQyslRrt6XDbENYBntuln05YrFBtW/eo0UN4XbCrKPn
+# zPn8PCTk1aiNPfuD9VZqKyM2tbtW4drBYD3uScDdbk/4LWBx2vAYn4vJYX07p1nv
+# yXiGD//DAoftpejHHY3DzR6gPzyOW02bFh0hXJh7ono9vYS0YUXjoLhgCRTqkUbd
+# /UwjRgF4KaGnVXvUSxoC33ZixNlVorVVFlqcbtH/HwWYTEjCxZ2dPoycBkcqpWmf
+# nTyFR/Uit4nK381jVkSXYs9rF1GWW4hcq1c1Dxy6RIdRtyZ9UuaYfJ279fLsFxxV
+# BktmA8pxUMptBpAnl9uaCGQ9Gxy3pft0yTUY4/z9KTlziDxESCCS6HEhdCn5x59k
+# tTuGOL3N+fuPGviDdrPcHDMCKOO9SOp24BEP67ypMfw0SxqeXN5Mrk2yLQ+T99IU
+# vL1qtq374gRFL+UausKkkguQWveTlvCDi5zCEtbpxPzX11e8kShAO+zgPDPa2BnP
+# y7hCeHh7bxEAQr7ancuGDdpYlmZdHPxiBE0v0zA+JvI+D5fXjeDGxMmOzzKIzF5u
+# SIGELRCkP0hyEqA=
 # SIG # End signature block
