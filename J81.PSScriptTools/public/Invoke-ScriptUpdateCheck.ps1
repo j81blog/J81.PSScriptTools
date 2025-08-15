@@ -112,8 +112,14 @@ function Invoke-ScriptUpdateCheck {
 
     # Script determines its own context
     try {
+        $i=0
         Get-PSCallStack | ForEach-Object {
-            Write-Verbose -Message "Script context: $($_.InvocationInfo.ScriptName) at line $($_.InvocationInfo.ScriptLineNumber)"
+            Write-Verbose "====== Call Stack Level $i ======"
+            Write-Verbose -Message "CallStack: $($_ | Out-String)"
+            Write-Verbose "================================="
+            Write-Verbose -Message "Script InvocationInfo: $($_.InvocationInfo | Out-String)"
+            Write-Verbose "================================="
+            $i++
         }
     } catch {
         Write-Warning -Message "Could not determine script context."
