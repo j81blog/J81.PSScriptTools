@@ -111,25 +111,24 @@ function Invoke-ScriptUpdateCheck {
     }
 
     # Script determines its own context
-    try {
-        $i=0
-        Get-PSCallStack | ForEach-Object {
-            Write-Verbose "====== Call Stack Level $i ======"
-            Write-Verbose -Message "CallStack: $($_ | Out-String)"
-            Write-Verbose "================================="
-            Write-Verbose -Message "Script InvocationInfo: $($_.InvocationInfo | Out-String)"
-            Write-Verbose "================================="
-            $i++
-        }
-    } catch {
-        Write-Warning -Message "Could not determine script context."
+        $PSCallStack = Get-PSCallStack
+    if ($PSCallStack.Count -eq 0) {
+        Write-Error -Message "No call stack found. This function must be called from a script or function."
+        return $false
     }
-    $scriptFullName = (Get-Variable -Name MyInvocation -Scope 1).Value.MyCommand.Name
+    $SourceScriptName = $PSCallStack[0].InvocationInfo.ScriptName
+    $SourceParameters = $PSCallStack[-1].InvocationInfo.MyCommand.Parameters
+    if (-not $SourceScriptName) {
+        Write-Error -Message "No script name found in call stack. This function must be called from a script."
+        return $false
+    }
+    $scriptFullName = Split-Path -Path $SourceScriptName -Leaf
     Write-Verbose -Message "Script full name: $($scriptFullName)"
-    $scriptPath = (Get-Variable -Name MyInvocation -Scope 1).Value.MyCommand.Path
+    $scriptPath = $SourceScriptName
     Write-Verbose -Message "Script path: $($scriptPath)"
     $scriptRoot = Split-Path -Path $scriptPath -Parent
     Write-Verbose -Message "Script root: $($scriptRoot)"
+    Write-Verbose -Message "Source parameters: $($SourceParameters | Out-String)"
     #endregion
 
     #region --- INITIAL CHECKS & MODES (Rollback/NoCheck) ---

@@ -8,7 +8,7 @@
     RootModule        = 'J81.PSScriptTools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '2025.815.2215'
+    ModuleVersion     = '2025.815.2220'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
