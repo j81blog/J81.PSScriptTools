@@ -31,7 +31,7 @@ function Invoke-ScriptUpdateCheck {
 
     .NOTES
         Function Name   : Invoke-ScriptUpdateCheck
-        Version         : v2025.815.2200
+        Version         : v2025.815.2205
         Author          : John Billekens
 
     .LINK
@@ -111,12 +111,26 @@ function Invoke-ScriptUpdateCheck {
     }
 
     # Script determines its own context
+    try {
+        Write-Verbose "Level 0"
+        Write-Verbose "$((Get-Variable -Name MyInvocation -Scope 0).Value.MyCommand | Out-String)"
+        Write-Verbose "Level 1"
+        Write-Verbose "$((Get-Variable -Name MyInvocation -Scope 1).Value.MyCommand | Out-String)"
+        Write-Verbose "Level 2"
+        Write-Verbose "$((Get-Variable -Name MyInvocation -Scope 2).Value.MyCommand | Out-String)"
+        Write-Verbose "Level 3"
+        Write-Verbose "$((Get-Variable -Name MyInvocation -Scope 3).Value.MyCommand | Out-String)"
+
+
+    } catch {
+        Write-Warning -Message "Could not determine script context."
+    }
     $scriptFullName = (Get-Variable -Name MyInvocation -Scope 1).Value.MyCommand.Name
-    Write-Verbose -Message "Script full name : $($scriptFullName)"
+    Write-Verbose -Message "Script full name: $($scriptFullName)"
     $scriptPath = (Get-Variable -Name MyInvocation -Scope 1).Value.MyCommand.Path
-    Write-Verbose -Message "Script path      : $($scriptPath)"
+    Write-Verbose -Message "Script path: $($scriptPath)"
     $scriptRoot = Split-Path -Path $scriptPath -Parent
-    Write-Verbose -Message "Script root      : $($scriptRoot)"
+    Write-Verbose -Message "Script root: $($scriptRoot)"
     #endregion
 
     #region --- INITIAL CHECKS & MODES (Rollback/NoCheck) ---
@@ -296,8 +310,8 @@ function Invoke-ScriptUpdateCheck {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC4uSeCb98klHr4
-# +TY8NPrds4nzKuD2x15uYWQVGH5E26CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBTF+CfpEeVwhiZ
+# Rjecy1YKjGWeBsUoGCRemgf7EFhiF6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -473,31 +487,31 @@ function Invoke-ScriptUpdateCheck {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCC+pAqYycLsRWF8VX3l8NWV/i5AnlvUP/0P53hfzcCc
-# 3jANBgkqhkiG9w0BAQEFAASCAYA65jWui3RCibHPIMxidM3shgs/p/VUSFVD09Dj
-# A3Vgg7K9x16PZePdaEvPDWNJcAg+F6eL09By98exRCgpnilSDo2PIOYnNgV7VKFm
-# l7AQ06XwI804YgaHaFdLrPDQU02M0545/kuJHySyWD67uM5NMUL2dW+Obd1atQHx
-# XyndZ5Ra6BFPTmpCaZGXddwTpBQubJSNdnFIggRiRYVG9ZGfNRgo74GHs/NNmOCM
-# OFngwSe54T7aZdmZW8cHOscnOwO0A/PNp9ISkhAg6HXyilQsKZ+nh1jJ0yOoxNaE
-# KR/3gdzsmZw/6/6PJe5NU9jJide3VUx3nlB/VlStcuHB++Z5w+6ovCpva5LbWQJP
-# MYPcQjrGaw/bQLeg1GefiST1uxW/sQ4BOHlVQeJZg+K+KnVxopnNf3w+ZaoSkh7D
-# g5GoyGW69fHqeE7SuKUa9M8wdT/b3fRSu9XlPmvhsqV2HksY4rN1HleCRuW9tmbx
-# qXJSf2UkdQfFdTgOe+tp9nRbKduhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCBb/h3XMz2jP5F2rrxF9AkAs9TTyhn274jOSEjrXJE4
+# ezANBgkqhkiG9w0BAQEFAASCAYDDoNXT9f8AIlanwp5v+lGAMERPsM9Q3HfgTGn6
+# ONkBDYg4itfDwPIDg5BgIAxwiHh9jg72RPvdC/npdiWJ3MsSlczow5XHZb67Tf3a
+# eBp9vMU651n2AkHAaATi+2nAgMQhXZpEajM+nnIQil2v6eblGfySZ5n7RdCwastP
+# KgQa17NYUlRAJJ7JUWt123nlsAbHad77AAYJr0VdWzIjamBKPnlwDerOrKm2a+3N
+# FFrtRJBoA0Lx+RrWRb7T4/mV+KC1e9MUHmms6vWkg+lJ70qqHOQXU5KAnk1xi2R4
+# hUyJXrAP9bb3ipgsRX6buPkC5WyKY2oYskKi5SZ3IBr+uwTbNXGVpHORLNEHpmGt
+# blOfzPsGvedvb5zPFV2eGohCf3amXUMBs9KSWKmTEl/ZH3SAhGwxIpd4bDJAKbGS
+# qH3NYQa+dl887InVsiNFAeJDXCEZjMO2gB7e7u9pgLI/urkGo2ASFxygrtEsqgiu
+# U47TD5PtmgFv8aBej2FcRUIs+6ahggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTUyMDAwMjRaMD8GCSqGSIb3
-# DQEJBDEyBDBXkvx6nRu7DN3gPWUDRWY3cx2Ps4k4ZcHEyuPuR/sfTCXPWMpbGOIQ
-# 5s8MSv1t5q8wDQYJKoZIhvcNAQEBBQAEggIAA2PFFrUxgAdUh4UEmIxCwveFcy1M
-# 7A5Vng0g+LK9wdnsk1Da/FdM/naD4kmPdecyxtlVcVUE0n59eXslgf1oR9OcCzjg
-# vG7qRNGh3c8rBzA3nRq/exoKd5UacQXrVyWUoCjPcLycg2qcYNbFUCDpqbCU+Y39
-# FSPK2BkchtAuJPr/dLaTq4+M4l9G8S067E66qMj/3rCStxM/0a8CrB5ttJPGuzYi
-# rJlS6BDpzVmlf2YhCh4HFVZuonHsfpBkRh0bRfMTtsjIP85oAIsziBNNLcOVdn/I
-# 8I2jUUibsb4XBtc1efPvSTPGQRFjWhP4sp2YeTC+2fHAb1YnHZBJYq+nDimWVB3d
-# 07NZFVM5QFbQPmlNTOP12ZEEfzklxXNRlvPOVmiK8cdrT3PraNRvXWBIfLzXE+P8
-# 1z9GZxBn55uEt3ijvU6kmInSgyNcKwDk5zS3UkP3JEv8sDwen/xuYcdGhEo4yOBN
-# gZmkd1Js78Ju5NZu93dUNZVf57ho1pRJjOnyyfV+XaoBKUppB9QyC3YAy/Foalaa
-# KM8LG46l2rHNd3skpO7Ti+Gvk+YCDBccUes76OzmbmcPSGJvlU7rcqxUGrlFmHnL
-# 2DUxTE8VcArcZiMWIyUBlZP9TdiniOwyq8UPKgoj4766u10aIaTcCmzCg+6cFgfz
-# 4BNkhprYexFvkJ4=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTUyMDA3MTdaMD8GCSqGSIb3
+# DQEJBDEyBDDx3unW9OIj2anWDA5CBGAWgdD8GPptoWV2/zozr0c1hS4Fsi7rKuV7
+# XC2t/WXwk44wDQYJKoZIhvcNAQEBBQAEggIADlhnojOmiFwmv8iL2ayYDr3A0fpy
+# NRXiy3YUtW+X+qFpdrUu2soom5zOnF1RjbNHr60/QGr9Wuc/dYcBtkZ6RLRQ96Ed
+# P5CgYWUX7bEVSiOMHj8eR+LgV1v6z85s3jO1/5QL4iQaPst00LUiwiW7mbEb6sYW
+# jIRm49/kMZTAAj1G/oCzoR1DIEvw0AbFFSJd6zLsc0m/k56wBTN+qNj7HSk04s5W
+# Y3u1Gmrt/dWA3KPox3/7gqDv568tAZBkw8YyGzhtH03R21p/qVetGA849gO6HzHc
+# 1ynb7Y8mMP/UjlgDEqWsMVWV9DdUxnqH8lV7WqWR1XKKjAMEL6qT+bzJ20Atdqol
+# 9Fyhfc8T3SksOFFoVW0CgFVGxzpDOOyz/VfAm1XwTjUrDBiy079f0KUzofChCtRf
+# RD+sFJoKlgtUDN/7XmE8i5nBWVVE8GmV38lfuXt6zPH5nwYlCAxsKtioVvZOxYig
+# HTjPmAv+gVAN4MQq/NDKG0YyqrdGSTi4Mus0itm0CS14g0DS0py4tpU1vR5+NUJO
+# ojVtq6AbCLMwUV0tcFAuli5e8MBhuCUmD+0Aios7A4X1mmorREn+BoLO/hl1fYdE
+# Swhhw/uoTafSOonP85SmlKl+eiQ/PW47WgknENzunI673GevMcnxYnYxzniH7sU/
+# hrlRF/yTyWJcxDs=
 # SIG # End signature block
