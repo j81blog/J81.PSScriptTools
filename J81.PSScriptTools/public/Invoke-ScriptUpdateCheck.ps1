@@ -28,7 +28,7 @@ function Invoke-ScriptUpdateCheck {
 
     .NOTES
         Function Name   : Invoke-ScriptUpdateCheck
-        Version         : v2025.815.2250
+        Version         : v2025.815.2315
         Author          : John Billekens Consultancy
 
     .LINK
@@ -276,8 +276,14 @@ function Invoke-ScriptUpdateCheck {
         }
         Unblock-File -Path $tempPath
         $backupPath = "$($scriptPath -replace '\.ps1$', "_v$($CurrentVersion).bak")"
-        Write-Verbose -Message "Creating backup of current script at $($backupPath)"
-        Rename-Item -Path $scriptPath -NewName $backupPath -Force -ErrorAction Stop
+        try {
+            Write-Verbose -Message "Creating backup of current script at $($backupPath)"
+            Rename-Item -Path $scriptPath -NewName $backupPath -Force -ErrorAction Stop
+        } catch {
+            Write-Warning -Message "Failed to create backup of current script. Exiting update process."
+            Write-Error -Message "Backup creation failed: $($_.Exception.Message)"
+            return $false
+        }
         Write-Verbose -Message "Moving new script to $($scriptPath)"
         Move-Item -Path $tempPath -Destination $scriptPath -Force -ErrorAction Stop
         Write-InformationColored "Script successfully updated to version $($latestVersionString)." -ForegroundColor Green
@@ -295,8 +301,8 @@ function Invoke-ScriptUpdateCheck {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDl+BUIJ7Q1XnBf
-# wbwjB9agxN6bZHri9QqkDQSrMfbBiqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB+oe+92MUk62R+
+# xqXlKdOY4PT3uZE5cTTZc+xemPCG1aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -472,31 +478,31 @@ function Invoke-ScriptUpdateCheck {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCDaKeDcU2xrY+7gfaDVuDLIwo9ZxKiNyeipcGY9mCuC
-# DDANBgkqhkiG9w0BAQEFAASCAYCn/6BYrhQa3S8Cp+Owl831WKIGQcNoor/3/U5e
-# nMxLyrPBcmIs0gqYX94GFqt6htpsolbJFtBXEB8HK3hWeIACO+/T+mc/PR3bkg8E
-# HTOgpLP/+6SThZmVuITsoftjDKcFV8xM5C6ADC4jsCzU8e+Qb3R2KbFfFL/G5bvK
-# KeLa8jZSiWlZJ57pfeBZydgluEuJOPweWoHksEft6s/LiLMj8XCU57TXRzeHkrb8
-# RMlALiZLu6DncXJPAyZ9fsS6M8+zIwDycZ/R542Uis7mj9BEEVD8zidytiublrao
-# 2V+DFCOPSi34K/OsntiFTJoVfJbEwKp/y1nQSRGNID94hWXAYYg5iLc8/gwbAc3M
-# AI2Mbtz6KdqlBbhjkA8o7ut/5lduB8HILByF9yKodaAkbUm1SbGcHOCs6WsHOkCE
-# ry52QX5Gp3HCy0DENhEHim1uSGj0aeYZwU0taVHGyP0FHHYiW3YCZNHjc3SQ6aW9
-# 7Wx46Tkp88pbCo/3euY/RHNfQeyhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCNyI8PHyIv4VTGk0TwmouC8SWfsmlcoR0JM3H8Rm8m
+# XjANBgkqhkiG9w0BAQEFAASCAYCggKGkNQdhJkTftNQGLh02ozcBMzCEROdvmWjF
+# 3TSNeUnqdVY/MPvKdvxTyptX1OWimWq7Yz385HqHGm/JTWB8A72N2pBthHsD4BkO
+# zwOEV7OR+bde/ofAjs1p5Q/xP87IMrjjvxrxahhtImJG2tfOWWF7VnDDmH2+CMzX
+# K9I9xhctCNn7RBRiQceBsFuqAuXQX8ygQf1l5eCJwhdD0tqLtcA6RI1yf2IsM/mK
+# kbBqxaf8dF43hn55SnT5GTscSVulxaqeOrFTyb3iT5Jd5j1DFmUiuRBAQezCVZc2
+# K6NBsLx9yDZwOOoJQVCW4lfvM8ARkjP7CZZCYbKFBbSHkdrUR/kjLbBx9uK8wYNa
+# 9hZioncoVvGj6nHBqoxkqPZszbSbNdTwsS4Am9624iiOggTsmzFkmxG7LgBycRin
+# xqeg2rCdD9mtHJc4my/pzivDpny+Kvu+b63NsFJ7i+QJjunrGytJLyrqV7YosZyH
+# 0i2mpNjhGW0uMLjcRzwlEaVTxYGhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTUyMDQ5NDJaMD8GCSqGSIb3
-# DQEJBDEyBDBOhBG4GFfy2rWSmbGZrmmgtWLiwLoPksQ0XpT6vewPkOcyeNmX0hlI
-# Y8DCzDRwrAgwDQYJKoZIhvcNAQEBBQAEggIAOeUXGJcL4+yz1uMkSb78ONucGUkw
-# Q4YYPgAP82Vl0X+ZvOZSWOS10cxAzN+EqnBb7mQ1re2ITc+Eepdzew+yAYyrvP5x
-# Z2E+AngCogJeworYwjKBvuvuDuniyvTprNdJScpZNyCtgQntDu+gJ0RtGeds6hGw
-# CLx8nxN/YUIpHY5JvkIKbbrmJdekoW3ZBQOfLbL4dTQWhzIitA3PJrboLMDqQekU
-# KSX1+SLxqE+lbFG0FE9uCeg8SDpDmC5YB+ozIqraGnYYj08CLsOolEaV7gDSb7AX
-# RU1qvHV2FtMGOAmJtAuumjVA/SV667SB6xgBvGbvLoOLapOLOB8YfQFISLk70Yal
-# nzHtGK4t4sMdXylcW69PUF/vZw2vFSqS1qPg00p18oBELzG+wAoD2dm3L5JmXvpK
-# kucRSSO+H1+h9hHlv2+gjpxTH07/+g8qP/v9nj80VNXNgjBdWRLUjtr63cuIwfdD
-# n9LiqCw/zS9qzurnnaXuqTDnCFhAr8Qph1p0NGrT+KPC8AADjHKynygD4eh9wW80
-# k+vjJvy8I1Jyh3jdQB+hCQtrcwqJEaFLZHNRTINwTTkdFUv/pz6AK8mQItNV6BPr
-# j92T5Fac7EeMlrTousZe3dBss8Xn/HK8csIprMW1Cvd4ay8GxD8iJyEGyXm8CQgi
-# 5sFJuO2TD9Sk2yQ=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTUyMTE2NDZaMD8GCSqGSIb3
+# DQEJBDEyBDBsZ6H0X0kFmUnh0slhsM5sauDLaKZK2D/JGHdxkYxaiBBi5zXyKyVz
+# 8NcjOJlFMiQwDQYJKoZIhvcNAQEBBQAEggIAqWxNmCpAengIi64cJjo8aiS8jlfb
+# 7e0lSirfdWpVuqRxlX2Yba6qjoYuofv2x3SZn9onhKn0Mzxzid0xYGQb66zimxP2
+# ZmhgRgsypfFhysKTLUHPjPFLs1dxaiyZQVnKrdtDLjUuf2+gzHHLMrU5FGjDbpqm
+# I+F6SYpnewybfQ5fiy1dRL69h3p6eEkmAI9BLTXA79maXYyaGME4+xpvzrz7a5TF
+# OiTw10Adsi96vxzcF+iC89pH1OMt1IRUXk2KzLYYqKKV2YRMvLIAq4jQvYIdki1l
+# 491dcp+pQJK3HyZTUG9zr8Om/ytNLKUU17yTD4Ka+L5ydKbah/gt+G5Q1a7Ny7C4
+# rxIrW4P0QFUIO8N8y7ROiZCDhmUTQ6lUFj1Zk6RvJSDQnN17238+DdgVf43Rx4Ys
+# 9hsN4i4PpAUPOKuRIZ5+cX/1Et9nFohByqRUNNKdgbkJH8CcLnAl3GxPck2KP+XU
+# M/j1fyebqPscjoaPIrF/YjUksVxfuhHhiyqh5bz4Yatu6IDHIDW46eCeQfc3VpKe
+# bnc+HFFyp3D0ENXSGpuFwrj43pHnGPJUKqM19wceJC4HHrw8lmZg0yPRREVbKRF2
+# 9HDi7XM/1oF9jU0ebG1FbaG24vyzdb6OlWnRaS+a6jvP2aRtDqn1nKT1XtfYcY/+
+# bgYfYr1L27hpxYY=
 # SIG # End signature block
