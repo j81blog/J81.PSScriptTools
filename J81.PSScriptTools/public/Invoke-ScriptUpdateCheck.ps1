@@ -117,7 +117,12 @@ function Invoke-ScriptUpdateCheck {
         return $false
     }
     $SourceScriptName = $PSCallStack[0].InvocationInfo.ScriptName
-    $SourceParameters = $PSCallStack[-1].InvocationInfo.MyCommand.Parameters
+    $pattern = '(?<=\.ps1\s).*?$'
+    if ($PSCallStack[-1].InvocationInfo.MyCommand -match $pattern) {
+        $SourceParameters = $matches[0]
+    } else {
+        $SourceParameters = $null
+    }
     if (-not $SourceScriptName) {
         Write-Error -Message "No script name found in call stack. This function must be called from a script."
         return $false
