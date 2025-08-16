@@ -28,7 +28,7 @@ function Invoke-ScriptUpdateCheck {
 
     .NOTES
         Function Name   : Invoke-ScriptUpdateCheck
-        Version         : v2025.816.2120
+        Version         : v2025.816.2138
         Author          : John Billekens Consultancy
 
     .LINK
@@ -85,11 +85,11 @@ function Invoke-ScriptUpdateCheck {
     #region --- SETUP VARIABLES ---
     $script:Silent = $Silent.IsPresent
     $Result = @{
-        Version = ""
-        Success = $false
-        Upgraded = $false
+        Version         = ""
+        Success         = $false
+        Upgraded        = $false
         RestartRequired = $false
-        Messages = New-Object System.Collections.Generic.List[string]
+        Messages        = New-Object System.Collections.Generic.List[string]
     }
     $SourceName = ""
     if ($PSCmdlet.ParameterSetName -eq 'Github') {
@@ -325,18 +325,22 @@ function Invoke-ScriptUpdateCheck {
             Write-InformationColored "Signature verified successfully." -ForegroundColor Green
             $Result.Messages.Add("Script Signature verified successfully.")
         } else {
-            Write-Verbose -Message "No certificate subject specified for signature verification."
+            Write-Verbose -Message "No certificate subject specified for signature verification. Skipping signature check."
             Write-InformationColored "No certificate subject specified for signature verification. Skipping signature check." -ForegroundColor Yellow
             $Result.Messages.Add("No certificate subject specified for signature verification. Skipping signature check.")
         }
+        Write-Verbose -Message "Update downloaded successfully to $($tempPath). Unblocking file..."
         Unblock-File -Path $tempPath
 
         $count = 1
         while ($true) {
+            Write-Verbose -Message "Checking for existing backup file..."
             $backupPath = "$($scriptPath -replace '\.ps1$', "_v$($CurrentVersion).bak")"
             if (-not (Test-Path -Path $backupPath)) {
+                Write-Verbose -Message "No existing backup file found. Proceeding with backup creation."
                 break
             }
+            Write-Verbose -Message "Backup file already exists at $($backupPath). Incrementing backup count."
             $backupPath = "$($scriptPath -replace '\.ps1$', "_v$($CurrentVersion)_$($count).bak")"
             $count++
         }
@@ -375,8 +379,8 @@ function Invoke-ScriptUpdateCheck {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDyJJ2eDEybXg2t
-# h0PJQLRKPsKvlpU/NYMd0fzn+YSEI6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD7xMB1f3wzcZYW
+# UjE7R+tOO/ZFz7mVamaHbca+Wzo/0aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -552,31 +556,31 @@ function Invoke-ScriptUpdateCheck {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAnMqwnbNp3ljC6/pFBNvVCOK0OThdTZncLGEIPhM9r
-# TTANBgkqhkiG9w0BAQEFAASCAYAwjNjpEvP8artHoNjoVNJscpFW55hl0VT/y1rP
-# +oUmegGm78hA7zs0M3/kASVYFbyi92qCWt1jOyJm9ZUR78auGV2WBbCvw2o5vCKF
-# LGcyBScw/JvveJP9YLluVj1dWA2Y2n7mk8aEiVlWBN4ia76akw72Zy31X1kRXrs8
-# LcQ+NU73Nwhm7ZnHu3HJB1APu12aN5MLfphoNMn+n9NxoQgI3Ku2XdL0VB8k/ZS+
-# CpuldOr61Au2uJjfLvP2b4WjKK5NPOsR11L3qIeBks+dU7HRsx3fmAjoSx9tQiu9
-# SVEKz12/Yg4MsgCVNIDTY1f/ius0hUtgfE0kJ9gNN7rtjFt0OBKuWCeBADbJVnaY
-# wci1YvGnQ/5rOFMDoj66cKWggtyzzuIe7d0eTSq3aZhgvavh12ZAXsUVyBANKOqa
-# r6RmM+WgtmGIRFCWinapK1ZUfk7PKuCsWlbmbVFEnl5Z7smoO3D0//LHjarpKNW2
-# wDERGvmFzBqpfYXl2FRUgp0DZvahggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCvI3/xVRuCkk+xahmeLnJoKlxhRUE41JvxwJhUqL7m
+# bTANBgkqhkiG9w0BAQEFAASCAYA3o2bTCD/LtaZzI5pN6u+V9TZ/Rb5+GJry6z9l
+# p3ic9dWaqgv8SXWhPaxj/Vmr28xvDyVehxwk5gD7wi05xgk9GSds/CoYVSRp2zvP
+# dgHB5tiwYflz9eT+GUuGQa+kUuqXIUMG36FUNI8ajaTJt4f5COe0PF0H4SYyMTb3
+# WPymunOK6YIzP84sPa9LGtxtgGrEjMMvJ1rAwoTENAyBsph6lXigt1CkVj3reu1r
+# CB/L3X1IPbYsvKs7k6vUtUKNjvAylfKD6XqlgjcOdm0yIwND/L46e54VzL+a3210
+# 3aIfouxaOYBw0YLl9foI3LQrk2kIKE9el9QAb+nqNXwbSDEK4Q6qjz3m/mfDMcPy
+# i9OQA6Al45AzxP/4P7vmY885l+PqodBjcuUKr9KmmwqPbQ9PIsasG71KqfYEIy7n
+# OsZLorJ6RrXy3xecnqghG488GzWIC173xXvUxZGbDwUsHz0LRtSj1N+lo6gj3Xr3
+# 935NLmazHmTxH28NuYsDVv3usimhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTYxOTIxNTNaMD8GCSqGSIb3
-# DQEJBDEyBDC40htBgSv9XjsnBin2ls2Hyw8dSCvyCmP4sPHGnnFI/pEC3Z8lc3W9
-# sirHA0P83+EwDQYJKoZIhvcNAQEBBQAEggIAmi4aCpramUxsfwGQo7pgnWRrcvf8
-# XIO5a+q1+X2arIuwTOOHCjmZp/6O0ntQt4Qqt+M7rEMmjEWku38Pkl0c0MiwkNtu
-# fQzLCLkqT1p6VGE9Y1CGhbLxG2TVIfcANv6TGk3hqSpOvrbM8/WO7g0RtACyr7en
-# 02l454rbTxZmQ0G30tN0KEMUD80qhpUKNYYch4IAJd6s+ZMFvsCZas91joWqikr6
-# 67oFRvfAv5RLsMOAdFWkc+ydDHtvbbzXXBG1gJSa3rvoxS93A8kAlzFjC7Kne5sp
-# TReBxx/orW6eikzBQA8Xr4xWYbKvtdRruNYTLtbwEuon5jn4DMsA8oAb536gdiQC
-# 0ml8qALgtsG/0nr3H56n675nKdWnZs9xLPX2MJ9z84DtuK6FZwgtFxoKMxKMHO3I
-# NsiOAoMXCHWsVrP1zuKdrB5HdcBnoJRTmWcPaox76FYLHs0HWFOgWvlpnOS6LATw
-# XTlWUGWF+qzQ3e3givlCVa8aMravwXQ/Kt6OcMrhsC+mR2Ubrk7yDxpIycRgKSA5
-# jpFOy6q9ifbYzlNxuo8tEMBFf9MnGaao8BDg6hO2cCIHm27gbWrQtXjQ1YwlWYfS
-# TH9LCAO+X07A6Wm09jwO6jN0KvCbsMiazdpDtpoYZ0P1IqlbWIm2n5SCkGeERkuW
-# Ubfil+OsXFQKdPQ=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTYxOTM5MDVaMD8GCSqGSIb3
+# DQEJBDEyBDDsVVyhIi831VKaqjI8VdaQoafUY/JXj4w7XeJlCHohitIDF29VXMBK
+# yfWMzG4zmocwDQYJKoZIhvcNAQEBBQAEggIAuG44ruaVma+JQEBQ/pYUVjVM2o0d
+# 4xTSw8BXWcD5SzwFDxLhYuOET0i3KlG26MxwHoyPCLHbojUlZ00cVHBYj7HgonMb
+# aRh4Uk/7ChBRCWdV5o4k0fiiICpJRnM4cfz5tWlTRWCm4Iej49z2K0Uy5OINoR8m
+# NFENcZcH4T3MzsjJZfhHNNoJqNETFhwNnZTHWanW2oMm7bsVbQkb4Trsbgn+4mOF
+# J9Y7IyhIDY/0d4MUDN8Z/TdFQP7JErr1oJw02ySf5oJECqNuYD7FM+oMGXVwJB7o
+# Sn6+ZIO4GRcVFC8ypt7AJ/9wJ7Jujz53q0qKzTC2G5R1Ns28uQZfhW8jC401H1Rk
+# OD3ubNeFebczUg8Uhl5IZ5Cn5tK182gtjuBV6swabcXjJNH1LbQjhLVUvkuPJ5Sy
+# ZSchyhJw/GGEnomFUv9fDYS/YrhTtgKq3rM9027ANcxhTaXMtgNECo6ikc8Xf5T2
+# /hVckSN2GzYQvKpjeiH0zC0hSVC2H5ZFmdZLKkLY3DNAI1adeBpNThWn4rNyx5AM
+# 6oX2rJj68STyju5HrzFW7c/TkRlGYhGyLlgScbgrBoS4F/MJkQnmeK3QM88ByL1F
+# 6Cld9oJalmiWfUV4nPqU4ow3iRWxRGHRQHdOStnG1Aq+ZlTccejdbyB8h7XVYq1V
+# QTD+lqVSWGhb0Yc=
 # SIG # End signature block
