@@ -28,7 +28,7 @@ function Invoke-ScriptUpdateCheck {
 
     .NOTES
         Function Name   : Invoke-ScriptUpdateCheck
-        Version         : v2025.816.2138
+        Version         : v2025.816.2140
         Author          : John Billekens Consultancy
 
     .LINK
@@ -333,9 +333,9 @@ function Invoke-ScriptUpdateCheck {
         Unblock-File -Path $tempPath
 
         $count = 1
+        $backupPath = "$($scriptPath -replace '\.ps1$', "_v$($CurrentVersion).bak")"
         while ($true) {
             Write-Verbose -Message "Checking for existing backup file..."
-            $backupPath = "$($scriptPath -replace '\.ps1$', "_v$($CurrentVersion).bak")"
             if (-not (Test-Path -Path $backupPath)) {
                 Write-Verbose -Message "No existing backup file found. Proceeding with backup creation."
                 break
@@ -379,8 +379,8 @@ function Invoke-ScriptUpdateCheck {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD7xMB1f3wzcZYW
-# UjE7R+tOO/ZFz7mVamaHbca+Wzo/0aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB9/segY7sZuCvG
+# 9VYQJDZYVKELykrELJJOrqVVwvLFW6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -556,31 +556,31 @@ function Invoke-ScriptUpdateCheck {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCCvI3/xVRuCkk+xahmeLnJoKlxhRUE41JvxwJhUqL7m
-# bTANBgkqhkiG9w0BAQEFAASCAYA3o2bTCD/LtaZzI5pN6u+V9TZ/Rb5+GJry6z9l
-# p3ic9dWaqgv8SXWhPaxj/Vmr28xvDyVehxwk5gD7wi05xgk9GSds/CoYVSRp2zvP
-# dgHB5tiwYflz9eT+GUuGQa+kUuqXIUMG36FUNI8ajaTJt4f5COe0PF0H4SYyMTb3
-# WPymunOK6YIzP84sPa9LGtxtgGrEjMMvJ1rAwoTENAyBsph6lXigt1CkVj3reu1r
-# CB/L3X1IPbYsvKs7k6vUtUKNjvAylfKD6XqlgjcOdm0yIwND/L46e54VzL+a3210
-# 3aIfouxaOYBw0YLl9foI3LQrk2kIKE9el9QAb+nqNXwbSDEK4Q6qjz3m/mfDMcPy
-# i9OQA6Al45AzxP/4P7vmY885l+PqodBjcuUKr9KmmwqPbQ9PIsasG71KqfYEIy7n
-# OsZLorJ6RrXy3xecnqghG488GzWIC173xXvUxZGbDwUsHz0LRtSj1N+lo6gj3Xr3
-# 935NLmazHmTxH28NuYsDVv3usimhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDW6K84IjXgNayvOpfCXUVw3XJQhGV0yiMVuOFRzxm3
+# 4zANBgkqhkiG9w0BAQEFAASCAYCYAX0omTI4XI0WCUFXaw7Sm70kHLny7Oz8WWsX
+# C8d/sq4no2ZRB6vit5aHoDmAavTGREgMTPy+8p/LKuaCB+tMezaYF2EteFPbmkII
+# 9f/ZZvldAiUiPAwzXEnWKDMBTsHPHXrZIWgxdgavxl6y5B1pRAsvLTqLe5aRKFW2
+# 2slAL2ShArqqWnRfCUXE3/ieWAXkFPAkn3DIeBMO4TtmJGwkKO10xdQJRvZkiCRY
+# RbMeui2Cs37fjBSigi4Gl+9e82Rp2JFl4PuQ7NXkTgAY3Y8yulOeDBkwTMEEsAMB
+# i8EyWGc7S63QJ/zKcZcBUEOEyJdCKKBhYS83S9ca8V5QqkYTUVYw+s2TLW5ocPDu
+# 7Jch505ggx37qTp5ASnwUwHDUax64w7GH8+FiSCjq0pZwMMv51dBe09mDp8Wz7LZ
+# VnLwUyW20E+rRR7W8pK8k3KVC0F3d10I2RSi0+i5znPIOis12/sNvif/hn++Xm6A
+# VuGYfEd40/X0UnCzUCXVLNYdbQShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTYxOTM5MDVaMD8GCSqGSIb3
-# DQEJBDEyBDDsVVyhIi831VKaqjI8VdaQoafUY/JXj4w7XeJlCHohitIDF29VXMBK
-# yfWMzG4zmocwDQYJKoZIhvcNAQEBBQAEggIAuG44ruaVma+JQEBQ/pYUVjVM2o0d
-# 4xTSw8BXWcD5SzwFDxLhYuOET0i3KlG26MxwHoyPCLHbojUlZ00cVHBYj7HgonMb
-# aRh4Uk/7ChBRCWdV5o4k0fiiICpJRnM4cfz5tWlTRWCm4Iej49z2K0Uy5OINoR8m
-# NFENcZcH4T3MzsjJZfhHNNoJqNETFhwNnZTHWanW2oMm7bsVbQkb4Trsbgn+4mOF
-# J9Y7IyhIDY/0d4MUDN8Z/TdFQP7JErr1oJw02ySf5oJECqNuYD7FM+oMGXVwJB7o
-# Sn6+ZIO4GRcVFC8ypt7AJ/9wJ7Jujz53q0qKzTC2G5R1Ns28uQZfhW8jC401H1Rk
-# OD3ubNeFebczUg8Uhl5IZ5Cn5tK182gtjuBV6swabcXjJNH1LbQjhLVUvkuPJ5Sy
-# ZSchyhJw/GGEnomFUv9fDYS/YrhTtgKq3rM9027ANcxhTaXMtgNECo6ikc8Xf5T2
-# /hVckSN2GzYQvKpjeiH0zC0hSVC2H5ZFmdZLKkLY3DNAI1adeBpNThWn4rNyx5AM
-# 6oX2rJj68STyju5HrzFW7c/TkRlGYhGyLlgScbgrBoS4F/MJkQnmeK3QM88ByL1F
-# 6Cld9oJalmiWfUV4nPqU4ow3iRWxRGHRQHdOStnG1Aq+ZlTccejdbyB8h7XVYq1V
-# QTD+lqVSWGhb0Yc=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTYxOTQxMjVaMD8GCSqGSIb3
+# DQEJBDEyBDBhploROlGbV95oehT3eWfcPCCoDwD1L3YviEAI3XFLzS6CpDWR0Ca0
+# vSnOgZGTJV8wDQYJKoZIhvcNAQEBBQAEggIAIOGglJUZqzfMNRo7wnZuudqIJOFH
+# uwT44l5SqQ9zK22EgZbIZh5ILdmPcEJ1h0Ttsco9B9h2YyS81WfdYgSpjYcVUis5
+# JMUtLAs8i2b+U9f6oDcqDtz7O01vDmWe1bT6FeuFEQPOtn6locUqLQAKyHpSbaQH
+# 7j63Pp8IbxUsURTwuURmY8iGg/x73vrgROg9TkuZCyGONZ3z08pyrFEkjgHnZ4sE
+# iToNx2opWuOrcQBO684jsBwDtEVQEWeIhE5bP4koNIrwfB2PzzuhWBYjMQbxFCDV
+# NBm+fGzBHxE1tP+Pf+vsLxLcYxM6ybyYQBSJvL4xl5/PTztwHatkUvkUTfOKHklr
+# 9llyUav+NvYEYUcEnRa1gRwopLNDYAPRQTdHSUKEssssuBdXr9HYrChHyYgrMkwL
+# q8uXzPfxbfK3S9CgpcrMZf2aTYtpGsHuWT3OK3MbjtYcsewQOC0Hdgq5OoNbU9ez
+# wUR64MGpA/WI/PpRK6OLkEsvMRxZWSFjy5inY7MaG6yTvLM8SMy/+6AvFDGYCsyy
+# kb4GodNByaNN5v8Xbn3I35nOnF/vjNGw6NN4QGY7XL+adhLtV/AeRu70fphioKrm
+# CIWt01eRnnwdJXckB0bdNuPiZ/YvrTmqjQc9VJDfQ9790L1f9OTp404KmS3Eb3TM
+# kl2K1hzWRaOgkpk=
 # SIG # End signature block
