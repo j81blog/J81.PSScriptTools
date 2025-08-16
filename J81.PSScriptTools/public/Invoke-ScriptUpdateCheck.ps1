@@ -28,7 +28,7 @@ function Invoke-ScriptUpdateCheck {
 
     .NOTES
         Function Name   : Invoke-ScriptUpdateCheck
-        Version         : v2025.815.2315
+        Version         : v2025.816.2120
         Author          : John Billekens Consultancy
 
     .LINK
@@ -84,7 +84,13 @@ function Invoke-ScriptUpdateCheck {
 
     #region --- SETUP VARIABLES ---
     $script:Silent = $Silent.IsPresent
-
+    $Result = @{
+        Version = ""
+        Success = $false
+        Upgraded = $false
+        RestartRequired = $false
+        Messages = New-Object System.Collections.Generic.List[string]
+    }
     $SourceName = ""
     if ($PSCmdlet.ParameterSetName -eq 'Github') {
         $SourceName = "GitHub"
@@ -133,23 +139,31 @@ function Invoke-ScriptUpdateCheck {
     #region --- INITIAL CHECKS & MODES (Rollback/NoCheck) ---
     if ($NoUpdateCheck) {
         Write-Verbose -Message "Update check explicitly skipped."
-        return $true
+        $Result.Success = $true
+        $Result.Messages.Add("No update check performed, as requested.")
+        return $Result
     }
 
     if ($Rollback) {
         Write-Verbose -Message "Rollback mode activated."
+        $Result.Messages.Add("Rollback mode activated. Attempting to roll back to the last backup.")
         $backupFile = Get-ChildItem -Path $scriptRoot -Filter "$($scriptFullName -replace '\.ps1$', '*.bak')" | Sort-Object -Property LastWriteTime -Descending | Select-Object -First 1
         if (-not $backupFile) {
             Write-Error -Message "No backup file (.bak) found to roll back to."
-            return $false
+            $Result.Success = $false
+            $Result.Messages.Add("No backup file found for rollback.")
+            return $Result
         }
         if ($PSCmdlet.ShouldProcess($scriptFullName, "Rollback to version from '$($backupFile.Name)'")) {
             $brokenScriptPath = "$($scriptPath).broken_$(Get-Date -Format 'yyyyMMddHHmmss')"
             Rename-Item -Path $scriptPath -NewName $brokenScriptPath -Force | Out-Null
             Rename-Item -Path $backupFile.FullName -NewName $scriptFullName -Force | Out-Null
             Write-InformationColored "Rollback successful. Please start the script again." -ForegroundColor Green
+            $Result.Success = $true
+            $Result.RestartRequired = $true
+            $Result.Messages.Add("Rollback successful, restart the script to apply changes.")
+            return $Result
         }
-        exit
     }
     #endregion
 
@@ -161,9 +175,12 @@ function Invoke-ScriptUpdateCheck {
         try {
             if ($ForceCheckUpdate) {
                 Write-Verbose -Message "Forced update check, ignoring last check time."
+                $Result.Messages.Add("Forced update check initiated.")
             } elseif ((Get-Date) -lt ([datetime]::FromFileTimeUtc($(Get-Content -Path $lastCheckFile))).AddHours($CheckIntervalHours)) {
                 Write-Verbose -Message "Update check skipped; last check was recent."
-                return $true
+                $Result.Success = $true
+                $Result.Messages.Add("Update check skipped; last check was within the throttling period of $($CheckIntervalHours) hours.")
+                return $Result
             }
         } catch {
             Write-Warning -Message "Could not parse last update check time. Checking now."
@@ -179,7 +196,9 @@ function Invoke-ScriptUpdateCheck {
         Set-Content -Path $lastCheckFile -Value ((Get-Date).ToFileTimeUtc())
     } catch {
         Write-Warning -Message "Could not retrieve update information from Gist. Continuing with current version."
-        return $true
+        $Result.Success = $true
+        $Result.Messages.Add("Could not retrieve update information from Gist. Continuing with current version.")
+        return $Result
     }
 
     $channelData = $versionInfo.channels.$UpdateChannel
@@ -193,26 +212,34 @@ function Invoke-ScriptUpdateCheck {
     #region --- VERSION & DEPENDENCY CHECK ---
     if ($channelData.forceUpdateBelowVersion -and ($currentVersionObj -lt [System.Version]$channelData.forceUpdateBelowVersion)) {
         Write-Error -Message "CRITICAL: Your script version ($($CurrentVersion)) is outdated. Update to $($latestVersionString) is required. Please run with '-AutoUpdate'."
-        return $false
+        $Result.Success = $false
+        $Result.Messages.Add("CRITICAL: Your script version ($($CurrentVersion)) is outdated. Update to $($latestVersionString) is required. Please run with '-AutoUpdate'.")
+        return $Result
     }
 
     if ($latestVersionObj -le $currentVersionObj) {
         Write-Verbose -Message "Your script is up-to-date (Latest Version: $($latestVersionString), Script Version: $($CurrentVersion))."
-        return $true
+        $Result.Success = $true
+        $Result.Messages.Add("Your script is up-to-date (Latest Version: $($latestVersionString), Script Version: $($CurrentVersion)).")
+        return $Result
     }
 
     Write-InformationColored "`r`nA new version ($($latestVersionString)) is available for the '$($UpdateChannel)' channel!" -ForegroundColor Yellow
+    $Result.Messages.Add("A new version ($($latestVersionString)) is available for the '$($UpdateChannel)' channel!")
 
     if ($versionDetails.notes -or $versionDetails.notes.Count -gt 0) {
         Write-InformationColored -Message "`r`nRelease Notes for version $($latestVersionString):" -ForegroundColor Cyan
-        $versionDetails.notes | ForEach-Object { Write-InformationColored -Message " => $_" }
+        $Result.Messages.Add("Release Notes for version $($latestVersionString):")
+        $versionDetails.notes | ForEach-Object { Write-InformationColored -Message " => $_"; $Result.Messages.Add(" => $_") }
     }
     if (($ShowDevInfoIfNewerVersion -or $channelData.showDevInfo) -and [version]$versionInfo.channels.dev.version -gt $latestVersionObj) {
         Write-InformationColored -Message "`r`nIMPORTANT: A newer development version ($($versionInfo.channels.dev.version)) is available in the 'dev' channel." -ForegroundColor Yellow
         Write-InformationColored -Message "Consider switching to the 'dev' channel for the latest features and fixes." -ForegroundColor Yellow
+        $Result.Messages.Add("IMPORTANT: A newer development version ($($versionInfo.channels.dev.version)) is available in the 'dev' channel. Consider switching to the 'dev' channel for the latest features and fixes.")
         if ($versionInfo.changelog.$($versionInfo.channels.dev.version).notes -or $versionInfo.changelog.$($versionInfo.channels.dev.version).notes.Count -gt 0) {
             Write-InformationColored -Message "`r`nDevelopment Release Notes for version $($versionInfo.channels.dev.version):" -ForegroundColor Cyan
-            $versionInfo.changelog.$($versionInfo.channels.dev.version).notes | ForEach-Object { Write-InformationColored -Message " => $_" }
+            $Result.Messages.Add("Development Release Notes for version $($versionInfo.channels.dev.version):")
+            $versionInfo.changelog.$($versionInfo.channels.dev.version).notes | ForEach-Object { Write-InformationColored -Message " => $_"; $Result.Messages.Add(" => $_") }
         }
     }
     #endregion
@@ -220,10 +247,15 @@ function Invoke-ScriptUpdateCheck {
     #region --- UPDATE EXECUTION ---
     if (-not $AutoUpdate) {
         Write-InformationColored -Message "Run with '-AutoUpdate' to install."
-        return $true
+        $Result.Success = $true
+        $Result.Messages.Add("Run with '-AutoUpdate' to install.")
+        return $Result
     }
     if (-not $PSCmdlet.ShouldProcess($scriptPath, "Update to version $($latestVersionString)")) {
-        return $true
+        Write-InformationColored -Message "Update cancelled by user." -ForegroundColor Yellow
+        $Result.Success = $true
+        $Result.Messages.Add("Update cancelled by user.")
+        return $Result
     }
 
     try {
@@ -232,33 +264,47 @@ function Invoke-ScriptUpdateCheck {
         try {
             $releaseInfo = Invoke-RestMethod -Uri $releaseApiUrl -ErrorAction Stop
             Write-InformationColored -Message "Successfully retrieved release information from $SourceName." -ForegroundColor Green
+            $Result.Messages.Add("Successfully retrieved release information from $SourceName.")
         } catch {
             if ($_.ErrorDetails.Message -and ($ErrorDetails = $_.ErrorDetails.Message | ConvertFrom-Json -ErrorAction SilentlyContinue)) {
                 if ($ErrorDetails.status -eq 404) {
-                    Write-Host "Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message), trying again with alternative option..."
+                    Write-InformationColored -Message "Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message), trying again with alternative option..."
+                    $Result.Messages.Add("Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message), trying again with alternative option...")
                     $releaseApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/releases/tags/v$($latestVersionString)"
                     Write-Verbose -Message "Retrying with URL: $($releaseApiUrl)"
                     try {
                         $releaseInfo = Invoke-RestMethod -Uri $releaseApiUrl -ErrorAction Stop
                         Write-InformationColored -Message "Successfully retrieved release information from $SourceName." -ForegroundColor Green
+                        $Result.Messages.Add("Successfully retrieved release information from $SourceName.")
                     } catch {
                         if ($_.ErrorDetails.Message -and ($ErrorDetails = $_.ErrorDetails.Message | ConvertFrom-Json -ErrorAction SilentlyContinue)) {
                             Write-Error -Message "Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message)"
-                            return $false
+                            $Result.Messages.Add("Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message)")
+                            $Result.Success = $false
+                            return $Result
                         } else {
                             Write-Error -Message "Failed to retrieve release information from $SourceName. Error: $($_.Exception.Message)"
-                            return $false
+                            $Result.Messages.Add("Failed to retrieve release information from $SourceName. Error: $($_.Exception.Message)")
+                            $Result.Success = $false
+                            return $Result
                         }
                     }
                 } else {
                     Write-Error -Message "Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message)"
-                    return $false
+                    $Result.Messages.Add("Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message)")
+                    $Result.Success = $false
+                    return $Result
                 }
             }
         }
         Write-Verbose -Message "Release information retrieved successfully."
         $downloadUrl = ($releaseInfo.assets | Where-Object { $_.name -ieq $scriptFullName }).browser_download_url
-        if (-not $downloadUrl) { throw "Could not find asset '$($scriptFullName)' in release '$($latestVersionString)'." }
+        if (-not $downloadUrl) {
+            Write-Error -Message "Could not find asset '$($scriptFullName)' in release '$($latestVersionString)'."
+            $Result.Messages.Add("Could not find asset '$($scriptFullName)' in release '$($latestVersionString)'.")
+            $Result.Success = $false
+            return $Result
+        }
 
         $tempPath = Join-Path -Path $env:TEMP -ChildPath $scriptFullName
         Write-Verbose -Message "Downloading update from $($downloadUrl)..."
@@ -269,40 +315,68 @@ function Invoke-ScriptUpdateCheck {
             if ($signature.Status -ne 'Valid') { throw "Signature check failed! Status: $($signature.Status)." }
 
             # The function uses the $requiredCertificateSubject variable from the parent script scope
-            if ($signature.SignerCertificate.Subject -ne $requiredCertificateSubject) { throw "Certificate subject mismatch! Expected '$($requiredCertificateSubject)', but got '$($signature.SignerCertificate.Subject)'." }
+            if ($signature.SignerCertificate.Subject -ne $requiredCertificateSubject) {
+                Write-Error -Message "Certificate subject mismatch! Expected '$($requiredCertificateSubject)', but got '$($signature.SignerCertificate.Subject)'."
+                $Result.Messages.Add("Certificate subject mismatch! Expected '$($requiredCertificateSubject)', but got '$($signature.SignerCertificate.Subject)'.")
+                $Result.Success = $false
+                return $Result
+            }
             Write-Verbose -Message "Signature valid and matches expected subject."
+            Write-InformationColored "Signature verified successfully." -ForegroundColor Green
+            $Result.Messages.Add("Script Signature verified successfully.")
         } else {
             Write-Verbose -Message "No certificate subject specified for signature verification."
+            Write-InformationColored "No certificate subject specified for signature verification. Skipping signature check." -ForegroundColor Yellow
+            $Result.Messages.Add("No certificate subject specified for signature verification. Skipping signature check.")
         }
         Unblock-File -Path $tempPath
-        $backupPath = "$($scriptPath -replace '\.ps1$', "_v$($CurrentVersion).bak")"
+
+        $count = 1
+        while ($true) {
+            $backupPath = "$($scriptPath -replace '\.ps1$', "_v$($CurrentVersion).bak")"
+            if (-not (Test-Path -Path $backupPath)) {
+                break
+            }
+            $backupPath = "$($scriptPath -replace '\.ps1$', "_v$($CurrentVersion)_$($count).bak")"
+            $count++
+        }
         try {
             Write-Verbose -Message "Creating backup of current script at $($backupPath)"
             Rename-Item -Path $scriptPath -NewName $backupPath -Force -ErrorAction Stop
+            $Result.Messages.Add("Backup created successfully at $($backupPath).")
         } catch {
             Write-Warning -Message "Failed to create backup of current script. Exiting update process."
             Write-Error -Message "Backup creation failed: $($_.Exception.Message)"
-            return $false
+            $Result.Messages.Add("Backup creation failed: $($_.Exception.Message)")
+            $Result.Success = $false
+            return $Result
         }
         Write-Verbose -Message "Moving new script to $($scriptPath)"
         Move-Item -Path $tempPath -Destination $scriptPath -Force -ErrorAction Stop
         Write-InformationColored "Script successfully updated to version $($latestVersionString)." -ForegroundColor Green
+        $Result.Success = $true
+        $Result.Upgraded = $true
+        $Result.Version = $latestVersionString
+        $Result.Messages.Add("Script successfully updated to version $($latestVersionString).")
     } catch {
         Write-Error -Message "Update failed: $($_.Exception.Message)"
+        $Result.Messages.Add("Update failed: $($_.Exception.Message)")
         if (Test-Path -Path $backupPath) {
             Move-Item -Path $backupPath -Destination $scriptPath -Force
             Write-InformationColored "Restored previous version." -ForegroundColor Green
+            $Result.Messages.Add("Restored previous version from backup.")
         }
-        return $false
+        $Result.Success = $false
+        return $Result
     }
-    return $true
+    return $Result
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB+oe+92MUk62R+
-# xqXlKdOY4PT3uZE5cTTZc+xemPCG1aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDyJJ2eDEybXg2t
+# h0PJQLRKPsKvlpU/NYMd0fzn+YSEI6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -478,31 +552,31 @@ function Invoke-ScriptUpdateCheck {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCCNyI8PHyIv4VTGk0TwmouC8SWfsmlcoR0JM3H8Rm8m
-# XjANBgkqhkiG9w0BAQEFAASCAYCggKGkNQdhJkTftNQGLh02ozcBMzCEROdvmWjF
-# 3TSNeUnqdVY/MPvKdvxTyptX1OWimWq7Yz385HqHGm/JTWB8A72N2pBthHsD4BkO
-# zwOEV7OR+bde/ofAjs1p5Q/xP87IMrjjvxrxahhtImJG2tfOWWF7VnDDmH2+CMzX
-# K9I9xhctCNn7RBRiQceBsFuqAuXQX8ygQf1l5eCJwhdD0tqLtcA6RI1yf2IsM/mK
-# kbBqxaf8dF43hn55SnT5GTscSVulxaqeOrFTyb3iT5Jd5j1DFmUiuRBAQezCVZc2
-# K6NBsLx9yDZwOOoJQVCW4lfvM8ARkjP7CZZCYbKFBbSHkdrUR/kjLbBx9uK8wYNa
-# 9hZioncoVvGj6nHBqoxkqPZszbSbNdTwsS4Am9624iiOggTsmzFkmxG7LgBycRin
-# xqeg2rCdD9mtHJc4my/pzivDpny+Kvu+b63NsFJ7i+QJjunrGytJLyrqV7YosZyH
-# 0i2mpNjhGW0uMLjcRzwlEaVTxYGhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCAnMqwnbNp3ljC6/pFBNvVCOK0OThdTZncLGEIPhM9r
+# TTANBgkqhkiG9w0BAQEFAASCAYAwjNjpEvP8artHoNjoVNJscpFW55hl0VT/y1rP
+# +oUmegGm78hA7zs0M3/kASVYFbyi92qCWt1jOyJm9ZUR78auGV2WBbCvw2o5vCKF
+# LGcyBScw/JvveJP9YLluVj1dWA2Y2n7mk8aEiVlWBN4ia76akw72Zy31X1kRXrs8
+# LcQ+NU73Nwhm7ZnHu3HJB1APu12aN5MLfphoNMn+n9NxoQgI3Ku2XdL0VB8k/ZS+
+# CpuldOr61Au2uJjfLvP2b4WjKK5NPOsR11L3qIeBks+dU7HRsx3fmAjoSx9tQiu9
+# SVEKz12/Yg4MsgCVNIDTY1f/ius0hUtgfE0kJ9gNN7rtjFt0OBKuWCeBADbJVnaY
+# wci1YvGnQ/5rOFMDoj66cKWggtyzzuIe7d0eTSq3aZhgvavh12ZAXsUVyBANKOqa
+# r6RmM+WgtmGIRFCWinapK1ZUfk7PKuCsWlbmbVFEnl5Z7smoO3D0//LHjarpKNW2
+# wDERGvmFzBqpfYXl2FRUgp0DZvahggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTUyMTE2NDZaMD8GCSqGSIb3
-# DQEJBDEyBDBsZ6H0X0kFmUnh0slhsM5sauDLaKZK2D/JGHdxkYxaiBBi5zXyKyVz
-# 8NcjOJlFMiQwDQYJKoZIhvcNAQEBBQAEggIAqWxNmCpAengIi64cJjo8aiS8jlfb
-# 7e0lSirfdWpVuqRxlX2Yba6qjoYuofv2x3SZn9onhKn0Mzxzid0xYGQb66zimxP2
-# ZmhgRgsypfFhysKTLUHPjPFLs1dxaiyZQVnKrdtDLjUuf2+gzHHLMrU5FGjDbpqm
-# I+F6SYpnewybfQ5fiy1dRL69h3p6eEkmAI9BLTXA79maXYyaGME4+xpvzrz7a5TF
-# OiTw10Adsi96vxzcF+iC89pH1OMt1IRUXk2KzLYYqKKV2YRMvLIAq4jQvYIdki1l
-# 491dcp+pQJK3HyZTUG9zr8Om/ytNLKUU17yTD4Ka+L5ydKbah/gt+G5Q1a7Ny7C4
-# rxIrW4P0QFUIO8N8y7ROiZCDhmUTQ6lUFj1Zk6RvJSDQnN17238+DdgVf43Rx4Ys
-# 9hsN4i4PpAUPOKuRIZ5+cX/1Et9nFohByqRUNNKdgbkJH8CcLnAl3GxPck2KP+XU
-# M/j1fyebqPscjoaPIrF/YjUksVxfuhHhiyqh5bz4Yatu6IDHIDW46eCeQfc3VpKe
-# bnc+HFFyp3D0ENXSGpuFwrj43pHnGPJUKqM19wceJC4HHrw8lmZg0yPRREVbKRF2
-# 9HDi7XM/1oF9jU0ebG1FbaG24vyzdb6OlWnRaS+a6jvP2aRtDqn1nKT1XtfYcY/+
-# bgYfYr1L27hpxYY=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTYxOTIxNTNaMD8GCSqGSIb3
+# DQEJBDEyBDC40htBgSv9XjsnBin2ls2Hyw8dSCvyCmP4sPHGnnFI/pEC3Z8lc3W9
+# sirHA0P83+EwDQYJKoZIhvcNAQEBBQAEggIAmi4aCpramUxsfwGQo7pgnWRrcvf8
+# XIO5a+q1+X2arIuwTOOHCjmZp/6O0ntQt4Qqt+M7rEMmjEWku38Pkl0c0MiwkNtu
+# fQzLCLkqT1p6VGE9Y1CGhbLxG2TVIfcANv6TGk3hqSpOvrbM8/WO7g0RtACyr7en
+# 02l454rbTxZmQ0G30tN0KEMUD80qhpUKNYYch4IAJd6s+ZMFvsCZas91joWqikr6
+# 67oFRvfAv5RLsMOAdFWkc+ydDHtvbbzXXBG1gJSa3rvoxS93A8kAlzFjC7Kne5sp
+# TReBxx/orW6eikzBQA8Xr4xWYbKvtdRruNYTLtbwEuon5jn4DMsA8oAb536gdiQC
+# 0ml8qALgtsG/0nr3H56n675nKdWnZs9xLPX2MJ9z84DtuK6FZwgtFxoKMxKMHO3I
+# NsiOAoMXCHWsVrP1zuKdrB5HdcBnoJRTmWcPaox76FYLHs0HWFOgWvlpnOS6LATw
+# XTlWUGWF+qzQ3e3givlCVa8aMravwXQ/Kt6OcMrhsC+mR2Ubrk7yDxpIycRgKSA5
+# jpFOy6q9ifbYzlNxuo8tEMBFf9MnGaao8BDg6hO2cCIHm27gbWrQtXjQ1YwlWYfS
+# TH9LCAO+X07A6Wm09jwO6jN0KvCbsMiazdpDtpoYZ0P1IqlbWIm2n5SCkGeERkuW
+# Ubfil+OsXFQKdPQ=
 # SIG # End signature block
