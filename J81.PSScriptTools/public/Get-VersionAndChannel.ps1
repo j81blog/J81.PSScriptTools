@@ -18,7 +18,7 @@
 
     .NOTES
         Function Name   : Get-VersionAndChannel
-        Version         : v2025.817.1530
+        Version         : v2025.817.1545
         Author          : John Billekens Consultancy
 #>
 function Get-VersionAndChannel {
@@ -37,6 +37,7 @@ function Get-VersionAndChannel {
     $TagName = $GithubEventReleaseTagName
     $Version = $TagName -replace '^v'
 
+    Write-Host "Repository: $GithubRepository"
     Write-Host "Tag Name: $TagName"
     Write-Host "Version: $Version"
 
@@ -48,7 +49,14 @@ function Get-VersionAndChannel {
     }
 
     try {
+        Write-Host "Fetching release information from: $ReleaseUrl"
         $ReleaseData = Invoke-RestMethod -Uri $ReleaseUrl -Headers $Headers
+        if (-not $ReleaseData) {
+            Write-Error "No release data found for tag '$TagName'."
+            exit 1
+        }
+        Write-Host "Release data retrieved successfully."
+        Write-Verbose "Release data: $($ReleaseData | ConvertTo-Json -Depth 5)"
         $IsPrerelease = $ReleaseData.prerelease
         Write-Host "Release: '$TagName'; Pre-release: $IsPrerelease"
         if ($IsPrerelease) {
@@ -84,8 +92,8 @@ function Get-VersionAndChannel {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCplyeNbFqPuQBH
-# /r0BoHgohL7gugY78PHvU4EAxrGD16CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCF+X+o+WrwmlDZ
+# L5w6yK5v/PsZwijRB+jJsH5UhNgeaqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -261,31 +269,31 @@ function Get-VersionAndChannel {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCB2AMNHc9joyYmp05ZgqQbwktVmCDt/JGEA+wtHfC+7
-# vTANBgkqhkiG9w0BAQEFAASCAYCa0c2UrPqB1H+6S5G0T87wTvpmz6mZ0S70LiYX
-# 592opc5qeQAHJ9pTabBJWDmDwtblH7LKE4tjJ8WhcDBdCHLdNuzdQnp5QkMMyxWS
-# ZcY1VE2f0Co5JRXN+7unaGY0YX7PXGhkJzdfVTj46Mvivr9MHOz8tSrbIP5X2vrd
-# HaKYu4FaHM1LefMAp6rt0/yTyCuLpe6XvHhwOjTA0eexKwuAQE5hAhusgqT98Iab
-# DwYD/ulG3A9Z5sZRA3FDxroJIqAtIM3v8KKe1VMBDUHDD66YkzSLtFshKRkaS3de
-# zxfXMLS0Ayf584HHyV7fYb/ATA1r0JYXpTsRyKaSB73VIMmxbVdn1Hsgj4u9nlLN
-# b5ArVYHxlRSDA7FG+bMPBqLT70BY0OAbJ+L00ByiRufctgLTlSnh8KkKqzu1e79i
-# /PwsXJV9D/ckbLu8ieh75Yd3mp/VGwxayOpPxWNGsIKMcZl4/RdSvWUucEvoD3UX
-# mOjHUrxA33M6jBy4DI8yEJgijPihggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCD5KF8UiM8CeP1o7ujFgZCKMEIlV90z64GDqg/A01lg
+# ATANBgkqhkiG9w0BAQEFAASCAYB5UXi6ytoLs/wJN07hw2IXXW0jFMgHrw/+U5KA
+# dtEw+Lp/CXgZVmslyDths1A/seFg9BqfzOi8rqAQoCWSJSioPR2TSYaahj+P1fCb
+# Sn+JxJTe8ZZVVM1zcOBR8tXAqIImcDHy137w2Y6E/nlVS9vWXux4lzT7o4UFpnKI
+# Phe0+MHOLchoOGMsf+tIRU7GZWjO0Gw7UjFANCZ5j69fjatVp8/AN5F2GN+HW8sr
+# RuTrPWMkWEJl058X3LizcIxecswfQQ5IjZL/tKyMf3nP/XuKV/vEYiqQJg379hsp
+# gurt0zZ9MCWRQUWxj+IkBdnBf6pzIs+cZZhyqIUzhG1BnOkNRkPHDAfNSZtnqH6f
+# x7qsmvm5zM1oJInrHabKg3LO/uncZgA9ccVvvICKM07ZU9bIKZmjrLGmZ3AObGmQ
+# UzqYv3iDudJWBwNNV3MXHtVV+RpHKkMBR0t5Jvg6yFkbeLmiT8oDbRKwYjX2gAIu
+# wZH60aRds3C1GVWKnI0lCNBpe0KhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxMzMxMDdaMD8GCSqGSIb3
-# DQEJBDEyBDCLUoii1ukoFUWxmC4yshlZL7CVaM0SU1sl9Rd4RXVEbPbL8Uyf2hFi
-# rDu4gJnF5jMwDQYJKoZIhvcNAQEBBQAEggIASgadQiX/xX/EgAo4Cl4oN4DGHU3+
-# xhZsIkGivXboALTc7ipKLXMYlGAnHuPfoy7eKn0fV46GUDa2Zu7cVKJea/8W+G0m
-# DV7Zpi2KIJj3fSYs2bypRurjnmAwJB+sAYpg8s0wNsJpSRsY7D7A1gXX8djouQ1Z
-# plUKVtGMqIzsn3FGY+f93vYWhp0erinxJq6W4L0TTjvVniv0DNMzvwugQIK2mpHC
-# N1YKU8FaekY9ksOL4TIH4HWpT2GDQMZvKW1lAYePEbxzmVtzd+n+6AGeTT0Uplu8
-# hKolsTOWWdDEkyKMyJSqVwHksYXhrYOnWCr9ywsGwwMb19WU5SIl8kWCl8PPsNOu
-# Alh9mX+8nRU4YYiYt6NM23EjImeWu70mF/4Y52SoflFGvmTC14mrEy2YFMIOUoGD
-# 7h3+6CoPX1YBem2t9LTqBy3xWLmIV+pncEABG4tLBe4w2gFNbmr/Vxe8jN/9+lGG
-# Lb9nhPwNfcDrFbUTCgiIFMEZMTPJzgkKi8FwXnYpuh0dVqRKi9B+24K6RUgk09Vg
-# 2R/tx0uFmNSJ+O/8NM3oJm97XD7YX/+M7BQtXKp+Bag6fsx08VI0SUdzNTJ38r0x
-# XwkidZAR7uWKWRTkMyOdv0ptihQ4V7aG1NWGJkd7unBHvkDzV8JUR9cg4NFZvsNj
-# 8QRiaTWCtgdHH5g=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxMzQ1MzZaMD8GCSqGSIb3
+# DQEJBDEyBDAseUrPXADBqUf6kpRUJ+zCReDRQ+EZwuks/UsYb8mrMn5aVW2Ahv3f
+# ehF6fVcRgt8wDQYJKoZIhvcNAQEBBQAEggIAAGjJu8SCbarsvBeIQWRik/EkcFXD
+# zJoyX+X7JDV0jzGrPfL0ld5alg+vAVi7XWB2JTNoQlKI2RjjGuyOypfjXONbOhnW
+# 5J5KHPrTAusYzrwjO8M8paVXU0hNuBWEAYj4lkJQg5YhJnzbFQF3dNqdeckT/8FY
+# 4SLCqGQcB7pfbiPT0HHLFkI9Pz3zg7XDHxOWAJjgkcTcFjSebjh6FCL5z8OM25rw
+# H5g0mT6VCO7MRWCxbljozCm/RS3AnQlLw+3KN84A72MHvaS891OKvGHXh4RStdbs
+# 1EQiaVGvBWg4Ig9fRB3+RwyreJiPB6EmZKoSmxcnjbzTexDNd1HiXPv/bxDRXi3k
+# PqXrJ78st8x3fVv1mhIW+yXJQY6IjdTHL+Uu3kzQWetByeruHvDjzZ20nK3sMeOa
+# +57LR089vXfvPF8Yg2Y5uiElAtweXKj1oItPNIuAW1jIiTtq5ON5MxmJpnGcbNRe
+# 3lmM3jZkKytKqbbwRmRVwj3guPP2TTjmkYN9SOphBEKvRQ+Qr8yXznFp/9cycu2R
+# 6prlZzPAeRthXOR8N/QR6mEJV4exMj+HSxVx0Z1mL7kLnNVxoXNwgRkIhBpejNNN
+# 0dhzB6G71z3eY0fyqc6OvmRLHsI8sgIsWOecvVP9nGrDhNFD/K0CSIxpXDZYrhyZ
+# 3R98/XCL3EdCg34=
 # SIG # End signature block
