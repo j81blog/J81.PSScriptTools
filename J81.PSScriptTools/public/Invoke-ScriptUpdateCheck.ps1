@@ -28,7 +28,7 @@ function Invoke-ScriptUpdateCheck {
 
     .NOTES
         Function Name   : Invoke-ScriptUpdateCheck
-        Version         : v2025.816.2140
+        Version         : v2025.817.1425
         Author          : John Billekens Consultancy
 
     .LINK
@@ -96,15 +96,21 @@ function Invoke-ScriptUpdateCheck {
         $SourceName = "GitHub"
         if ([String]::IsNullOrEmpty($GithubOwner)) {
             Write-Error -Message "GitHub owner not specified. Please set the `$GithubOwner variable."
-            return $false
+            $Result.Success = $false
+            $Result.Messages.Add("GitHub owner not specified. Please set the `$GithubOwner variable.")
+            return ([PSCustomObject]$Result)
         }
         if ([String]::IsNullOrEmpty($GithubRepo)) {
             Write-Error -Message "GitHub repository not specified. Please set the `$GithubRepo variable."
-            return $false
+            $Result.Success = $false
+            $Result.Messages.Add("GitHub repository not specified. Please set the `$GithubRepo variable.")
+            return ([PSCustomObject]$Result)
         }
         if ([String]::IsNullOrEmpty($GistId)) {
             Write-Error -Message "Gist ID not specified. Please set the `$GistId variable."
-            return $false
+            $Result.Success = $false
+            $Result.Messages.Add("Gist ID not specified. Please set the `$GistId variable.")
+            return ([PSCustomObject]$Result)
         }
         $jsonUrl = "https://gist.githubusercontent.com/$($GithubOwner)/$($GistId)/raw/$($GistFilename)"
         Write-Verbose -Message "Using Github URL: $($jsonUrl)"
@@ -114,7 +120,9 @@ function Invoke-ScriptUpdateCheck {
     $PSCallStack = Get-PSCallStack
     if ($PSCallStack.Count -eq 0) {
         Write-Error -Message "No call stack found. This function must be called from a script or function."
-        return $false
+        $Result.Success = $false
+        $Result.Messages.Add("No call stack found. This function must be called from a script or function.")
+        return ([PSCustomObject]$Result)
     }
     $SourceScriptName = $PSCallStack[0].InvocationInfo.ScriptName
     $pattern = '(?<=\.ps1\s).*?$'
@@ -125,7 +133,9 @@ function Invoke-ScriptUpdateCheck {
     }
     if (-not $SourceScriptName) {
         Write-Error -Message "No script name found in call stack. This function must be called from a script."
-        return $false
+        $Result.Success = $false
+        $Result.Messages.Add("No script name found in call stack. This function must be called from a script.")
+        return ([PSCustomObject]$Result)
     }
     $scriptFullName = Split-Path -Path $SourceScriptName -Leaf
     Write-Verbose -Message "Script full name: $($scriptFullName)"
@@ -141,7 +151,7 @@ function Invoke-ScriptUpdateCheck {
         Write-Verbose -Message "Update check explicitly skipped."
         $Result.Success = $true
         $Result.Messages.Add("No update check performed, as requested.")
-        return $Result
+        return ([PSCustomObject]$Result)
     }
 
     if ($Rollback) {
@@ -152,7 +162,7 @@ function Invoke-ScriptUpdateCheck {
             Write-Error -Message "No backup file (.bak) found to roll back to."
             $Result.Success = $false
             $Result.Messages.Add("No backup file found for rollback.")
-            return $Result
+            return ([PSCustomObject]$Result)
         }
         if ($PSCmdlet.ShouldProcess($scriptFullName, "Rollback to version from '$($backupFile.Name)'")) {
             $brokenScriptPath = "$($scriptPath).broken_$(Get-Date -Format 'yyyyMMddHHmmss')"
@@ -162,7 +172,7 @@ function Invoke-ScriptUpdateCheck {
             $Result.Success = $true
             $Result.RestartRequired = $true
             $Result.Messages.Add("Rollback successful, restart the script to apply changes.")
-            return $Result
+            return ([PSCustomObject]$Result)
         }
     }
     #endregion
@@ -180,7 +190,7 @@ function Invoke-ScriptUpdateCheck {
                 Write-Verbose -Message "Update check skipped; last check was recent."
                 $Result.Success = $true
                 $Result.Messages.Add("Update check skipped; last check was within the throttling period of $($CheckIntervalHours) hours.")
-                return $Result
+                return ([PSCustomObject]$Result)
             }
         } catch {
             Write-Warning -Message "Could not parse last update check time. Checking now."
@@ -198,7 +208,7 @@ function Invoke-ScriptUpdateCheck {
         Write-Warning -Message "Could not retrieve update information from Gist. Continuing with current version."
         $Result.Success = $true
         $Result.Messages.Add("Could not retrieve update information from Gist. Continuing with current version.")
-        return $Result
+        return ([PSCustomObject]$Result)
     }
 
     $channelData = $versionInfo.channels.$UpdateChannel
@@ -214,14 +224,14 @@ function Invoke-ScriptUpdateCheck {
         Write-Error -Message "CRITICAL: Your script version ($($CurrentVersion)) is outdated. Update to $($latestVersionString) is required. Please run with '-AutoUpdate'."
         $Result.Success = $false
         $Result.Messages.Add("CRITICAL: Your script version ($($CurrentVersion)) is outdated. Update to $($latestVersionString) is required. Please run with '-AutoUpdate'.")
-        return $Result
+        return ([PSCustomObject]$Result)
     }
 
     if ($latestVersionObj -le $currentVersionObj) {
         Write-Verbose -Message "Your script is up-to-date (Latest Version: $($latestVersionString), Script Version: $($CurrentVersion))."
         $Result.Success = $true
         $Result.Messages.Add("Your script is up-to-date (Latest Version: $($latestVersionString), Script Version: $($CurrentVersion)).")
-        return $Result
+        return ([PSCustomObject]$Result)
     }
 
     Write-InformationColored "`r`nA new version ($($latestVersionString)) is available for the '$($UpdateChannel)' channel!" -ForegroundColor Yellow
@@ -249,13 +259,13 @@ function Invoke-ScriptUpdateCheck {
         Write-InformationColored -Message "Run with '-AutoUpdate' to install."
         $Result.Success = $true
         $Result.Messages.Add("Run with '-AutoUpdate' to install.")
-        return $Result
+        return ([PSCustomObject]$Result)
     }
     if (-not $PSCmdlet.ShouldProcess($scriptPath, "Update to version $($latestVersionString)")) {
         Write-InformationColored -Message "Update cancelled by user." -ForegroundColor Yellow
         $Result.Success = $true
         $Result.Messages.Add("Update cancelled by user.")
-        return $Result
+        return ([PSCustomObject]$Result)
     }
 
     try {
@@ -281,19 +291,19 @@ function Invoke-ScriptUpdateCheck {
                             Write-Error -Message "Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message)"
                             $Result.Messages.Add("Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message)")
                             $Result.Success = $false
-                            return $Result
+                            return ([PSCustomObject]$Result)
                         } else {
                             Write-Error -Message "Failed to retrieve release information from $SourceName. Error: $($_.Exception.Message)"
                             $Result.Messages.Add("Failed to retrieve release information from $SourceName. Error: $($_.Exception.Message)")
                             $Result.Success = $false
-                            return $Result
+                            return ([PSCustomObject]$Result)
                         }
                     }
                 } else {
                     Write-Error -Message "Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message)"
                     $Result.Messages.Add("Failed to retrieve release information from $SourceName. [$($ErrorDetails.status)] $($ErrorDetails.message)")
                     $Result.Success = $false
-                    return $Result
+                    return ([PSCustomObject]$Result)
                 }
             }
         }
@@ -303,7 +313,7 @@ function Invoke-ScriptUpdateCheck {
             Write-Error -Message "Could not find asset '$($scriptFullName)' in release '$($latestVersionString)'."
             $Result.Messages.Add("Could not find asset '$($scriptFullName)' in release '$($latestVersionString)'.")
             $Result.Success = $false
-            return $Result
+            return ([PSCustomObject]$Result)
         }
 
         $tempPath = Join-Path -Path $env:TEMP -ChildPath $scriptFullName
@@ -319,7 +329,7 @@ function Invoke-ScriptUpdateCheck {
                 Write-Error -Message "Certificate subject mismatch! Expected '$($requiredCertificateSubject)', but got '$($signature.SignerCertificate.Subject)'."
                 $Result.Messages.Add("Certificate subject mismatch! Expected '$($requiredCertificateSubject)', but got '$($signature.SignerCertificate.Subject)'.")
                 $Result.Success = $false
-                return $Result
+                return ([PSCustomObject]$Result)
             }
             Write-Verbose -Message "Signature valid and matches expected subject."
             Write-InformationColored "Signature verified successfully." -ForegroundColor Green
@@ -353,7 +363,7 @@ function Invoke-ScriptUpdateCheck {
             Write-Error -Message "Backup creation failed: $($_.Exception.Message)"
             $Result.Messages.Add("Backup creation failed: $($_.Exception.Message)")
             $Result.Success = $false
-            return $Result
+            return ([PSCustomObject]$Result)
         }
         Write-Verbose -Message "Moving new script to $($scriptPath)"
         Move-Item -Path $tempPath -Destination $scriptPath -Force -ErrorAction Stop
@@ -371,16 +381,16 @@ function Invoke-ScriptUpdateCheck {
             $Result.Messages.Add("Restored previous version from backup.")
         }
         $Result.Success = $false
-        return $Result
+        return ([PSCustomObject]$Result)
     }
-    return $Result
+    return ([PSCustomObject]$Result)
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB9/segY7sZuCvG
-# 9VYQJDZYVKELykrELJJOrqVVwvLFW6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAZd2bHOgUKj9qX
+# qo0tJsq3+pAFf4hM3tgTWDQf/x0q5KCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -556,31 +566,31 @@ function Invoke-ScriptUpdateCheck {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCDW6K84IjXgNayvOpfCXUVw3XJQhGV0yiMVuOFRzxm3
-# 4zANBgkqhkiG9w0BAQEFAASCAYCYAX0omTI4XI0WCUFXaw7Sm70kHLny7Oz8WWsX
-# C8d/sq4no2ZRB6vit5aHoDmAavTGREgMTPy+8p/LKuaCB+tMezaYF2EteFPbmkII
-# 9f/ZZvldAiUiPAwzXEnWKDMBTsHPHXrZIWgxdgavxl6y5B1pRAsvLTqLe5aRKFW2
-# 2slAL2ShArqqWnRfCUXE3/ieWAXkFPAkn3DIeBMO4TtmJGwkKO10xdQJRvZkiCRY
-# RbMeui2Cs37fjBSigi4Gl+9e82Rp2JFl4PuQ7NXkTgAY3Y8yulOeDBkwTMEEsAMB
-# i8EyWGc7S63QJ/zKcZcBUEOEyJdCKKBhYS83S9ca8V5QqkYTUVYw+s2TLW5ocPDu
-# 7Jch505ggx37qTp5ASnwUwHDUax64w7GH8+FiSCjq0pZwMMv51dBe09mDp8Wz7LZ
-# VnLwUyW20E+rRR7W8pK8k3KVC0F3d10I2RSi0+i5znPIOis12/sNvif/hn++Xm6A
-# VuGYfEd40/X0UnCzUCXVLNYdbQShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCD0dogtQ04T74oNLwjin32OdlnAMvwTg0rAt1vV+JQC
+# EjANBgkqhkiG9w0BAQEFAASCAYAV7NN565mVglHk4apvC6sItFCDFbxYTwYkudwL
+# 1vVP6OmYe1cencnZrdiT0sqnwWPLwAM0PBrDeNmwREfmkJwqyyVvS8AVlI+stlKj
+# BrxYYVUVIJmoga72OsnfFEwN6Qy5N+1rVRl7QLmzlujxGcnmSvDEtKoh8kEVOg3H
+# xnOYKsIcLnvuD6UOnR36SaX91jIvjSk0evfcl0i51nTqC2JvKEjyMoEzdqSmjCAj
+# QH4YzXHxTXUfQecWlF7KTEPHkXe9crHHLwzvGrFfU4296OaDBVqaEqQa19sObQA6
+# Xa5HvgwckMvDNyn8K5b27RyekqN6xH5q30p2DA1KVX/YItx3e5ixXctyRAzBamdN
+# PDhOrfx5GwOq/fBqPD95dss/3ffDm7BRjR9uDY24/F0A4QC1/oWBXYVuDllgJpNk
+# RkVisuerePUrXdfgSvM0fqe+VZLggIBRbr40qAZufGS/Nu9yN0egcwuEUS0/Y4r8
+# +YJRQJS2C6TT+cHKUmGu7u04cJihggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTYxOTQxMjVaMD8GCSqGSIb3
-# DQEJBDEyBDBhploROlGbV95oehT3eWfcPCCoDwD1L3YviEAI3XFLzS6CpDWR0Ca0
-# vSnOgZGTJV8wDQYJKoZIhvcNAQEBBQAEggIAIOGglJUZqzfMNRo7wnZuudqIJOFH
-# uwT44l5SqQ9zK22EgZbIZh5ILdmPcEJ1h0Ttsco9B9h2YyS81WfdYgSpjYcVUis5
-# JMUtLAs8i2b+U9f6oDcqDtz7O01vDmWe1bT6FeuFEQPOtn6locUqLQAKyHpSbaQH
-# 7j63Pp8IbxUsURTwuURmY8iGg/x73vrgROg9TkuZCyGONZ3z08pyrFEkjgHnZ4sE
-# iToNx2opWuOrcQBO684jsBwDtEVQEWeIhE5bP4koNIrwfB2PzzuhWBYjMQbxFCDV
-# NBm+fGzBHxE1tP+Pf+vsLxLcYxM6ybyYQBSJvL4xl5/PTztwHatkUvkUTfOKHklr
-# 9llyUav+NvYEYUcEnRa1gRwopLNDYAPRQTdHSUKEssssuBdXr9HYrChHyYgrMkwL
-# q8uXzPfxbfK3S9CgpcrMZf2aTYtpGsHuWT3OK3MbjtYcsewQOC0Hdgq5OoNbU9ez
-# wUR64MGpA/WI/PpRK6OLkEsvMRxZWSFjy5inY7MaG6yTvLM8SMy/+6AvFDGYCsyy
-# kb4GodNByaNN5v8Xbn3I35nOnF/vjNGw6NN4QGY7XL+adhLtV/AeRu70fphioKrm
-# CIWt01eRnnwdJXckB0bdNuPiZ/YvrTmqjQc9VJDfQ9790L1f9OTp404KmS3Eb3TM
-# kl2K1hzWRaOgkpk=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxMjI3MDFaMD8GCSqGSIb3
+# DQEJBDEyBDCW7IbsKvWy8x7Jvuftx8DN1+JThXIzCNK4N6zjeZPS2pKkdUl2s8pH
+# PxTF5LF+lUcwDQYJKoZIhvcNAQEBBQAEggIAq+d03h/eG5+U0HNTPZRig7VnTL68
+# u3lqk98ubvcm4DGG4Yk1MShM0W0qA8dvgZ2MTZ494wPUuGmwzyL62vHb2imVmPG7
+# 986n2VqxI7kOjlAqbAmZh8eMM4qXg5y+9+b7miq8ItxsTiqi1N/43Uu6PZQqFjzB
+# yLIBmpsBLz+8gxR10voC7sh/8Wfe6ArWl0Z/xJe3TRTo7tenHrCTYsiIustVRjuY
+# G2sjHPzL6ygzQyEAhqIIQDNlB4M/tUWqV5iPUI2QuSsY33abzg+/qOdGFUuZw11a
+# trBlaTOmwzYA2v7DpaSfkxXaK50uATf0jGyRQTCzHqbPYFo9Hg44vM8XuZx2z314
+# OpRVB6+KXQRTjhbHIRDi9eH3e8EE08RuGGe6jYp9JsKoRwv/epNTR1eQwe1e64Ct
+# jH6V7Az0L88bcMR4Hhem1KHHdiSgJNGop2zTMZN5vTyBAsUOgVX5LEQZl4g8mdv8
+# HWy5YudAZvNRQe3HuGn96vR/yMcATM1OqrtPSPIF2USBsvBOR6VBtUerWIum2Ow9
+# MP9t8oSKqHf/Dj73B9e2Lv6R/yGZVh9LlR4WVdu6XUNz5R5Ji9bTn2u1folmaJuC
+# 1Y0j0EuPUOjQH87OuKbcxJKf/SmJTrUb5/R2KbGLmpPKOyIkpdCGJ/Z4M4dYNOhK
+# i53t/nJcDCBHigw=
 # SIG # End signature block
