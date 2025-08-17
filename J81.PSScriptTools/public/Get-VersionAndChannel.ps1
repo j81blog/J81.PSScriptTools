@@ -1,138 +1,91 @@
-#
-# Module manifest for module 'J81.PSScriptTools'
-#
+<#
+    .SYNOPSIS
+        Retrieves the version and channel from a GitHub release tag.
 
-@{
+    .DESCRIPTION
+        This script fetches the version and channel information from a GitHub release tag.
+        It determines the channel based on whether the release is a pre-release or not.
 
-    # Script module or binary module file associated with this manifest.
-    RootModule        = 'J81.PSScriptTools.psm1'
+    .PARAMETER GithubRepository
+        The GitHub repository in the format 'owner/repo'. Defaults to the environment variable `GH_REPOSITORY`.
 
-    # Version number of this module.
-    ModuleVersion     = '2025.817.1530'
+    .PARAMETER GithubEventReleaseTagName
+        The GitHub release tag name to retrieve information from. Defaults to the environment variable `GH_EVENT_RELEASE_TAG_NAME`.
 
-    # Supported PSEditions
-    # CompatiblePSEditions = @()
+    .EXAMPLE
+        Get-VersionAndChannel -GithubRepository "j81blog/J81.PSScriptTools"
+        This command retrieves the version and channel from the specified GitHub repository's release tag.
 
-    # ID used to uniquely identify this module
-    GUID              = '080e0e05-5d75-4e2c-b764-87f27133dad5'
+    .NOTES
+        Function Name   : Get-VersionAndChannel
+        Version         : v2025.817.1530
+        Author          : John Billekens Consultancy
+#>
+function Get-VersionAndChannel {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+         [string]$GithubRepository = $env:GH_REPOSITORY,
 
-    # Author of this module
-    Author            = 'John Billekens'
-
-    # Company or vendor of this module
-    CompanyName       = 'John Billekens Consultancy'
-
-    # Copyright statement for this module
-    Copyright         = '(c) 2025 John Billekens Consultancy. All rights reserved.'
-
-    # Description of the functionality provided by this module
-    Description       = 'Powershell Module to (auto)update PowerShell scripts to a newer version.'
-
-    # Minimum version of the Windows PowerShell engine required by this module
-    PowerShellVersion = '5.1'
-
-    # Name of the Windows PowerShell host required by this module
-    # PowerShellHostName = ''
-
-    # Minimum version of the Windows PowerShell host required by this module
-    # PowerShellHostVersion = ''
-
-    # Minimum version of Microsoft .NET Framework required by this module. This prerequisite is valid for the PowerShell Desktop edition only.
-    # DotNetFrameworkVersion = ''
-
-    # Minimum version of the common language runtime (CLR) required by this module. This prerequisite is valid for the PowerShell Desktop edition only.
-    # CLRVersion = ''
-
-    # Processor architecture (None, X86, Amd64) required by this module
-    # ProcessorArchitecture = ''
-
-    # Modules that must be imported into the global environment prior to importing this module
-    # RequiredModules = @()
-
-    # Assemblies that must be loaded prior to importing this module
-    # RequiredAssemblies = @()
-
-    # Script files (.ps1) that are run in the caller's environment prior to importing this module.
-    # ScriptsToProcess = @()
-
-    # Type files (.ps1xml) to be loaded when importing this module
-    # TypesToProcess = @()
-
-    # Format files (.ps1xml) to be loaded when importing this module
-    # FormatsToProcess = @()
-
-    # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
-    # NestedModules = @()
-
-    # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-    FunctionsToExport = @(
-        'Get-GitHubCommitDescriptionByName',
-        'Invoke-ScriptUpdateCheck',
-        'New-GithubGist',
-        'New-VersionInfo',
-        'Update-GithubGist',
-        'Publish-ScriptRelease',
-        'Get-ExceptionDetails',
-        'Get-VersionAndChannel',
-        'Set-GistContent',
-        'Test-GistUpdate'
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$GithubEventReleaseTagName = $env:GH_EVENT_RELEASE_TAG_NAME
     )
 
-    # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
-    CmdletsToExport   = '*'
+    $Owner, $Repository = $GithubRepository -split '/'
+    $TagName = $GithubEventReleaseTagName
+    $Version = $TagName -replace '^v'
 
-    # Variables to export from this module
-    VariablesToExport = '*'
+    Write-Host "Tag Name: $TagName"
+    Write-Host "Version: $Version"
 
-    # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-    AliasesToExport   = '*'
+    $ReleaseUrl = "https://api.github.com/repos/$($Owner)/$($Repository)/releases/tags/$($TagName)"
+    $Headers = @{
+        "Accept"               = "application/vnd.github+json"
+        "Authorization"        = "Bearer ${env:GITHUB_TOKEN}"
+        "X-GitHub-Api-Version" = "2022-11-28"
+    }
 
-    # DSC resources to export from this module
-    # DscResourcesToExport = @()
+    try {
+        $ReleaseData = Invoke-RestMethod -Uri $ReleaseUrl -Headers $Headers
+        $IsPrerelease = $ReleaseData.prerelease
+        Write-Host "Release: '$TagName'; Pre-release: $IsPrerelease"
+        if ($IsPrerelease) {
+            $Channel = 'dev'
+        } else {
+            $Channel = 'stable'
+        }
+        Write-Host "Determined channel: $Channel"
+    } catch {
+        Write-Error "Failed to retrieve release information for '$TagName'. Error: $($_.Exception.Message)"
+        exit 1
+    }
 
-    # List of all modules packaged with this module
-    # ModuleList = @()
+    Write-Host "Storing channel and version in outputs."
 
-    # List of all files packaged with this module
-    # FileList = @()
+    if (-not [string]::IsNullOrEmpty($Channel)) {
+        Write-Host "Channel determined: $Channel"
+        Write-Output "channel=$Channel" >> $env:GITHUB_OUTPUT
+    } else {
+        Write-Error "Failed to determine channel for release '$TagName'."
+        exit 1
+    }
 
-    # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
-    PrivateData       = @{
-
-        PSData = @{
-
-            # Tags applied to this module. These help with module discovery in online galleries.
-            Tags       = 'J81', 'Functions', 'Library'
-
-            # A URL to the license for this module.
-            LicenseUri = 'https://github.com/j81blog/J81.PSScriptTools/blob/master/LICENSE'
-
-            # A URL to the main website for this project.
-            ProjectUri = 'https://github.com/j81blog/J81.PSScriptTools'
-
-            # A URL to an icon representing this module.
-            # IconUri = ''
-
-            # ReleaseNotes of this module
-            # ReleaseNotes = ''
-
-        } # End of PSData hashtable
-
-    } # End of PrivateData hashtable
-
-    # HelpInfo URI of this module
-    # HelpInfoURI = ''
-
-    # Default prefix for commands exported from this module. Override the default prefix using Import-Module -Prefix.
-    # DefaultCommandPrefix = ''
-
+    if (-not [string]::IsNullOrEmpty($Version)) {
+        Write-Host "Version determined: $Version"
+        Write-Output "version=$Version" >> $env:GITHUB_OUTPUT
+    } else {
+        Write-Error "Failed to determine version for release '$TagName'."
+        exit 1
+    }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBFMDahyyKAZdDW
-# s52aIyAJSDWdiwbo6/Aky/4tUk4R+aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCplyeNbFqPuQBH
+# /r0BoHgohL7gugY78PHvU4EAxrGD16CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -308,31 +261,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCBunO650AkM3f75H8/Oj5ktpvtyG0RvaoJJrhQgLlHP
-# LDANBgkqhkiG9w0BAQEFAASCAYCiaDyEfO/JgZEwGgcbvOcFfaWqC8Gn4LVSFsQi
-# gkmu6/Ha9Dd9AfXyRfIZfgjy/9OPntgrNJ3gtcJXeGL4aAj+2PEjy04c3KaR43kI
-# RTh5BdBO9rHwT+Lbeb+/2c2Azf/Y/wLUA2VUW2qvr3bgw6g/c6SArE5zLZSkUKSr
-# UwO0SvNU3eKxGMxoVtkqpcOJqfPJcVjCNKqRlnn+sORF5sVOeSw8JjGd9/iiHg3B
-# FYqF12BNcIz9c0qqXZQj48idn6DckafiD1J7W+eXZA9e3kOrgi9lB3Q/EGUM1bUJ
-# TJ6NEaJkR+TRrTnEByWwspiDDbZbsY95KT1+8ZBCanTtuCPCyJW2/+EbHrhUyygg
-# dK6hnnr1jM+s/2XCDoDerzCCLZTBiyqyi+qsg1Al9Y5MypiXW+eVu/dC8Z9joN6Y
-# 73myp1GvtQPA6subVCiQ6MPkRQRjo/vay5gV3zwFqkDsYvc7hsFALAqyt93lGik5
-# E1/Adp7Gquf6H5AYNInGQLYfpvGhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCB2AMNHc9joyYmp05ZgqQbwktVmCDt/JGEA+wtHfC+7
+# vTANBgkqhkiG9w0BAQEFAASCAYCa0c2UrPqB1H+6S5G0T87wTvpmz6mZ0S70LiYX
+# 592opc5qeQAHJ9pTabBJWDmDwtblH7LKE4tjJ8WhcDBdCHLdNuzdQnp5QkMMyxWS
+# ZcY1VE2f0Co5JRXN+7unaGY0YX7PXGhkJzdfVTj46Mvivr9MHOz8tSrbIP5X2vrd
+# HaKYu4FaHM1LefMAp6rt0/yTyCuLpe6XvHhwOjTA0eexKwuAQE5hAhusgqT98Iab
+# DwYD/ulG3A9Z5sZRA3FDxroJIqAtIM3v8KKe1VMBDUHDD66YkzSLtFshKRkaS3de
+# zxfXMLS0Ayf584HHyV7fYb/ATA1r0JYXpTsRyKaSB73VIMmxbVdn1Hsgj4u9nlLN
+# b5ArVYHxlRSDA7FG+bMPBqLT70BY0OAbJ+L00ByiRufctgLTlSnh8KkKqzu1e79i
+# /PwsXJV9D/ckbLu8ieh75Yd3mp/VGwxayOpPxWNGsIKMcZl4/RdSvWUucEvoD3UX
+# mOjHUrxA33M6jBy4DI8yEJgijPihggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxMzMxMjVaMD8GCSqGSIb3
-# DQEJBDEyBDA/yUMYZjNvhRndCzOAgAN7hmiE8Bf0hZLc0IfSsFxEhVMDNVuXvwVQ
-# Ixe4xJk22MwwDQYJKoZIhvcNAQEBBQAEggIAH9bhDaMIU4/QJ8MOBxxVookiIq3U
-# qXeZjH9XxfGqgKjVb6cYMadliCSV69KayzKuHy2DB7pIr8H8pMLO4GaHsGtaZ/QT
-# rM+kGAZ3zIWkqcsoctlpxjyAmzc1io1OtNenEfxilcg9nxd3swRRBvMn6EAr5+uu
-# RfPm0lBpc3C71dhjgg1BdhOMFB1paYEnxQ3T0R/YplPF3hfl7T1/ZbPYF1cWXfnX
-# I97umPNTFkhL3ltzlvAsbc9IztoGe2WE78LAOamhCxA5IK8wH0+MQUuAFMlcGD64
-# L6MmYs3dfi01N2Qhq5kyOErh2jfoGNUsQdOPdt7PRGZBwR5+zD1LPl/ikO1/uuE1
-# e8o6xsWNgNvYR5UX7cr+yjmIwEqPYql9gJwbT5UChxI9mWUqHKVRbV4PL+Ja8zn0
-# liHFmqsvm3svsbNFkRdTubZA2E58UWyfAXDIKNCEVpRdubTy7lIDEZRYOemdXGLY
-# kEuoKh3Qky5eGbk6mYyksscbliD1vh2/g1DE2MD8LhzGeC2KOrBBqM2qPGlio/es
-# uPw4x4B1t+Tj3MzY27PUoe6Ljeh3os5YMQ2dwQ03kGdg2+O9jgiCMkarPiYaEp8t
-# MBmf+0o3J1C2rL05q7tR6aLyMAriMeUeVzhurwmVZoMwl9nhIJuorQnPio/fRdo9
-# 6IK6Oe953iF0rQo=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxMzMxMDdaMD8GCSqGSIb3
+# DQEJBDEyBDCLUoii1ukoFUWxmC4yshlZL7CVaM0SU1sl9Rd4RXVEbPbL8Uyf2hFi
+# rDu4gJnF5jMwDQYJKoZIhvcNAQEBBQAEggIASgadQiX/xX/EgAo4Cl4oN4DGHU3+
+# xhZsIkGivXboALTc7ipKLXMYlGAnHuPfoy7eKn0fV46GUDa2Zu7cVKJea/8W+G0m
+# DV7Zpi2KIJj3fSYs2bypRurjnmAwJB+sAYpg8s0wNsJpSRsY7D7A1gXX8djouQ1Z
+# plUKVtGMqIzsn3FGY+f93vYWhp0erinxJq6W4L0TTjvVniv0DNMzvwugQIK2mpHC
+# N1YKU8FaekY9ksOL4TIH4HWpT2GDQMZvKW1lAYePEbxzmVtzd+n+6AGeTT0Uplu8
+# hKolsTOWWdDEkyKMyJSqVwHksYXhrYOnWCr9ywsGwwMb19WU5SIl8kWCl8PPsNOu
+# Alh9mX+8nRU4YYiYt6NM23EjImeWu70mF/4Y52SoflFGvmTC14mrEy2YFMIOUoGD
+# 7h3+6CoPX1YBem2t9LTqBy3xWLmIV+pncEABG4tLBe4w2gFNbmr/Vxe8jN/9+lGG
+# Lb9nhPwNfcDrFbUTCgiIFMEZMTPJzgkKi8FwXnYpuh0dVqRKi9B+24K6RUgk09Vg
+# 2R/tx0uFmNSJ+O/8NM3oJm97XD7YX/+M7BQtXKp+Bag6fsx08VI0SUdzNTJ38r0x
+# XwkidZAR7uWKWRTkMyOdv0ptihQ4V7aG1NWGJkd7unBHvkDzV8JUR9cg4NFZvsNj
+# 8QRiaTWCtgdHH5g=
 # SIG # End signature block

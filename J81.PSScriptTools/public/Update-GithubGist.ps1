@@ -48,7 +48,7 @@
 
     .NOTES
         Function Name   : Update-GithubGist
-        Version         : v2025.817.1425
+        Version         : v2025.817.1530
         Author          : John Billekens
         Requirements    :
             - The function reads the PAT from the environment variable PAT_TOKEN
@@ -61,26 +61,25 @@
 function Update-GithubGist {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $false)]
         [ValidateNotNullOrEmpty()]
-        [string]$GistId,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$GistContent,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$GistFileName,
+        [string]$GistId = $env:GIST_ID,
 
         [Parameter(Mandatory = $false)]
         [ValidateNotNullOrEmpty()]
+        [string]$GistContent = $env:GIST_CONTENT,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$GistFileName = $env:GIST_FILE_NAME,
+
+        [Parameter(Mandatory = $false)]
         [string]$Description = "",
 
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $false)]
         [ValidateNotNullOrEmpty()]
         [Alias('PAT', 'Token')]
-        [string]$PersonalAccessToken
+        [string]$PersonalAccessToken = $env:PAT_TOKEN
     )
 
     # Define the API endpoint for updating a Gist
@@ -128,8 +127,8 @@ function Update-GithubGist {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCPtcy9zYCLFfZL
-# WTz82e65zl/vYY6gDz6p79X5sBFog6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAgYjuAFmL0mtm1
+# ySC4aLExl9f4dqekJ6hspK2fG2ljuKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -305,31 +304,31 @@ function Update-GithubGist {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCDe5P1v/sLHlMe+sbzzpaQlAicGLIkpi+7pb86zGxGv
-# ujANBgkqhkiG9w0BAQEFAASCAYBiIB1Gey2vlgOytgx8gw6uI4j3yAZXqMqrEY8R
-# m7DypNllqiC69aVlsJbd9nMubohcx8ipPPmYAt94YhWEm92pq1o2bNFiQZOKDbFS
-# ACB8FVxD0U272h8WtHf9fFS+xpbjsxHIrDR3jT/Eya0amhSYOQgPaCnf2esyQfMH
-# D8swJbFDs8Tk1kzJ5VPJlsw5nbsLRo+Ri3AC19FjHv8t7rUqZbs9gJq6f/WwGaNH
-# LgPi5SKGt4HiYDDyfJ0Fbce9cZAxa+GvY6rbX5oUqtPm4RMH70aUagE8/eVu32Ya
-# 750/7Ai/TGSj/42E3uye5BKwLTrnFvfdfXfSRI+EkLQdTcH7AZWghL3rsB2m5uOb
-# 4ORng4soXXD9r+IiqXCNzsPyurp+Fuw4kWVIRxXhC5hkJJmL7YNDSPvE+RBoUVOb
-# SgaJ1uYQymSQXzM+IT1AZenLrTdfPT4Mwcc8jOlA1A0DmnClO9a84JdcPkUEnBOP
-# fNxmEi+Qlv6CnoaZD9jmquddCEyhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCZyigVYlvvOUrg/dNwqULAh5N7MPqmHN3rE2I6j9rN
+# 3TANBgkqhkiG9w0BAQEFAASCAYCbUbZAMPxPf3HRTzNY7w72cZ4leVcU3L1GHy0Z
+# eRX06LOCv19P7WCcJwbgb0CIG8TpcYTmru9+jd/W1v5Q0AWc+/MqYiGMMxUv7wJT
+# Sg/xAjwCzNv8uT+wV+fJsyn5CpHZgNiqo8XL85GvNZ4lq9CeImwiFIJSME+vBiWh
+# vh+/YZdXG+Du10Qjb6JDwOo0bJzhxN3PXQzzKLiLH8okP4uzuI12Gp09vn+WWPOG
+# Smf16DB3W+KQQWoABCsyzOVewYZ7PuDodF6R5bNlpVKPrTXcoU/51YdRKqZlB80e
+# UMtgUhlG3txvqXLHjZAyDiWQDTCjegKIHE8lWt5sW2bQhFiroNrGWckIo094PtIP
+# X0YOh6TacB/ldzVG1AjpWkTVKUH5W4ccPTugu6poKlqD1MOYMszZids4ACJuFNla
+# gX4wxSqWtkQE6AObZDmmz6ocxtQn82WR5KxqKUdvAqkfrOmMfvoXVgOndLfqnWwb
+# TrGSfQ2PunENUp1p/FMr4PkbMQmhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxMjI3MDdaMD8GCSqGSIb3
-# DQEJBDEyBDCaa80zoEDWtcZPo7z3pn208TSytuVT/m7LhLWM/lhaBlDynJNvQk43
-# sxZx1XFtpgIwDQYJKoZIhvcNAQEBBQAEggIAkF5Ai989bfcW94US+JaH1mnDE0Bz
-# WGRQDITBV8feAFF4m+LjghjOOpWPztT0gOSpSewFEcNrgZeYUDU1zNKQ2pMLTdje
-# mbOl95GHldM9iQ8+QUZ6vxGtlU3fDYtGLaHErhaUbUkwkTvI9at0yHM8FFvMlJPn
-# iz3bjunbRzulR9dnQY9Ci58wUeRkXQHnq5FNkAvOzy8v3LGoUBZ92wZxSaQhA1Am
-# bWGRscct8UcTgati7XX3YAhfbT3NBZ6/Z0MngEsfj6A83XcvGhE+m7aJCu1k1/vj
-# rte8PESgEdjQX2j+ZrTvwrvEsM2yZobg5hVhq0f8mkzjlsJCCdTsGyci2eD+wjDH
-# bpRpSw26i/tfgjXvjCZyLRaTLOenARuE23UO47zRWtXDRFqq1Psz+EBqH60H9khe
-# LF7x5rjMOKupyMNgD7f6o+XkgWZvX7qY+P/rYTCXvmR/sW9YZfdinrcrboQQKLpZ
-# 8R/PgwBIJU5WOh6lWIfI4nNz8cMTn1QzuzgSHAK3b52RDByZXt6gGP2A4+4iLjLW
-# me4kWsEL80JnCNhzIGcRYDCSVlvqEdWQjU/d98JDed7/CaIyj37v9Jd07NjH3z7s
-# b7OCNz6L5uwVRWAskCxvFXQnejCZ4fLX543XfaIvnvl33YCtzh6Se4GPqNqbHXQy
-# VurzKJUVenehxvI=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxMzMxMjJaMD8GCSqGSIb3
+# DQEJBDEyBDDrOsu1Kp/1txVyHSNnaMSmy2AGO8OIZ/9lB7LQ4V40qDh/7IfiGVeI
+# hqv1VJkC8UAwDQYJKoZIhvcNAQEBBQAEggIAIrUi/VCmCXK2R/pLcZ280HbFm+4V
+# j9HjbOUHjD7daOh4FYmOp1GIzvYxY60enErWIoslnWDLoA+ULFWy9cYfapVWRCaT
+# uRMd8OsIG+bD8qCap+BX5DS/qfl4tyCvjqZ+16VwLKz9GvVWkHSXdo+vcz+8Hjh1
+# TILTI9NuHObwL0yJ5D05v0GSM4hHx7QdaBheLJHTF2mQp6xaCOirhn/QFeJoAKKN
+# AgV8WtBBsybyN6trPbOwdmnk4ollkOGM6JadNTO7s08as7CdE5jx2w/TkLfWFLLP
+# osRcFk8rpCsYhbTYCOvq5/ogVZwN9RTe3C67513lrAcFwCFF/VBma2vvfLT5mzxs
+# E9IT5Y6n7YaZPJA4GSYiW0bMj1N+TPrRCCboshRm7JOycmMru1uiWO5GHM6LrAB5
+# bsu6zumN8/8ANUpFLx+kGtoCbzMS/iwqaQXN7mNi6Rkt/4eCyTUJfBZWWq8WXPsg
+# jIs5Xma+TehTcSvTMeZ2sVlbsE1DxpKcCDaCdiWPf3LlM2IbucaD4AmuMQB20OIY
+# i4zfRwjL8+nLgj3CUfeYjQh21qIhsP0Ezk209p1XRQrNXAMIdyVyNLLRcHFwWLKD
+# 6B6hT7fge2/05rYJH2lAxTED+X6UlQpUzV3uesZVIJt8ctqVwW2La33qaNTua9ki
+# rcFjxv+ma9f/0yY=
 # SIG # End signature block

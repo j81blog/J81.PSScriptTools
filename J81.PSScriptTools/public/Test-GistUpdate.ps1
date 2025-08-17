@@ -1,138 +1,93 @@
-#
-# Module manifest for module 'J81.PSScriptTools'
-#
+<#
+    .SYNOPSIS
+        Tests the update functionality of a GitHub Gist by checking if the version is set and contains release notes.
 
-@{
+    .DESCRIPTION
+        This script fetches the content of a specified GitHub Gist and verifies if the version
+        is set correctly and if the release notes for that version are present. It is used to ensure
+        that the Gist is ready for updates before proceeding with any changes.
 
-    # Script module or binary module file associated with this manifest.
-    RootModule        = 'J81.PSScriptTools.psm1'
+    .PARAMETER GithubRepository
+        The GitHub repository in the format 'owner/repo'. Defaults to the environment variable `
+        GH_REPOSITORY`.
 
-    # Version number of this module.
-    ModuleVersion     = '2025.817.1530'
+    .PARAMETER GithubGistID
+        The ID of the GitHub Gist to test. Defaults to the environment variable `GIST_ID`.
 
-    # Supported PSEditions
-    # CompatiblePSEditions = @()
+    .PARAMETER GithubGistFilename
+        The filename in the Gist to test. Defaults to the environment variable `GIST_FILE`.
 
-    # ID used to uniquely identify this module
-    GUID              = '080e0e05-5d75-4e2c-b764-87f27133dad5'
+    .PARAMETER Version
+        The version number to check in the Gist. Defaults to the environment variable `VERSION`.
 
-    # Author of this module
-    Author            = 'John Billekens'
+    .PARAMETER Channel
+        The channel to check in the Gist. Defaults to the environment variable `Channel`.
 
-    # Company or vendor of this module
-    CompanyName       = 'John Billekens Consultancy'
+    .EXAMPLE
+        Test-GistUpdate -GithubRepository "j81blog/J81.PSScriptTools" -GithubGistID "1234567890abcdef" -GithubGistFilename "changelog.json" -Version "1.0.0" -Channel "stable"
+        This command tests the specified Gist to ensure that the version 1.0.0 in the stable channel
+        is set correctly and that the release notes are present.
 
-    # Copyright statement for this module
-    Copyright         = '(c) 2025 John Billekens Consultancy. All rights reserved.'
+    .NOTES
+        Function Name   : Test-GistUpdate
+        Version         : v2025.817.1530
+        Author          : John Billekens
+#>
+function Test-GistUpdate {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$GithubRepository = $env:GH_REPOSITORY,
 
-    # Description of the functionality provided by this module
-    Description       = 'Powershell Module to (auto)update PowerShell scripts to a newer version.'
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$GithubGistID = $env:GIST_ID,
 
-    # Minimum version of the Windows PowerShell engine required by this module
-    PowerShellVersion = '5.1'
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$GithubGistFilename = $env:GIST_FILE,
 
-    # Name of the Windows PowerShell host required by this module
-    # PowerShellHostName = ''
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Version = $env:VERSION,
 
-    # Minimum version of the Windows PowerShell host required by this module
-    # PowerShellHostVersion = ''
-
-    # Minimum version of Microsoft .NET Framework required by this module. This prerequisite is valid for the PowerShell Desktop edition only.
-    # DotNetFrameworkVersion = ''
-
-    # Minimum version of the common language runtime (CLR) required by this module. This prerequisite is valid for the PowerShell Desktop edition only.
-    # CLRVersion = ''
-
-    # Processor architecture (None, X86, Amd64) required by this module
-    # ProcessorArchitecture = ''
-
-    # Modules that must be imported into the global environment prior to importing this module
-    # RequiredModules = @()
-
-    # Assemblies that must be loaded prior to importing this module
-    # RequiredAssemblies = @()
-
-    # Script files (.ps1) that are run in the caller's environment prior to importing this module.
-    # ScriptsToProcess = @()
-
-    # Type files (.ps1xml) to be loaded when importing this module
-    # TypesToProcess = @()
-
-    # Format files (.ps1xml) to be loaded when importing this module
-    # FormatsToProcess = @()
-
-    # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
-    # NestedModules = @()
-
-    # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-    FunctionsToExport = @(
-        'Get-GitHubCommitDescriptionByName',
-        'Invoke-ScriptUpdateCheck',
-        'New-GithubGist',
-        'New-VersionInfo',
-        'Update-GithubGist',
-        'Publish-ScriptRelease',
-        'Get-ExceptionDetails',
-        'Get-VersionAndChannel',
-        'Set-GistContent',
-        'Test-GistUpdate'
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Channel = $env:CHANNEL
     )
 
-    # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
-    CmdletsToExport   = '*'
+    $owner, $repository = $GithubRepository -split '/'
+    Write-Host "Owner: $owner, Repository: $repository"
+    $gistRawUrl = "https://gist.githubusercontent.com/$($owner)/$($GithubGistID)/raw/$($GithubGistFilename)"
 
-    # Variables to export from this module
-    VariablesToExport = '*'
-
-    # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-    AliasesToExport   = '*'
-
-    # DSC resources to export from this module
-    # DscResourcesToExport = @()
-
-    # List of all modules packaged with this module
-    # ModuleList = @()
-
-    # List of all files packaged with this module
-    # FileList = @()
-
-    # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
-    PrivateData       = @{
-
-        PSData = @{
-
-            # Tags applied to this module. These help with module discovery in online galleries.
-            Tags       = 'J81', 'Functions', 'Library'
-
-            # A URL to the license for this module.
-            LicenseUri = 'https://github.com/j81blog/J81.PSScriptTools/blob/master/LICENSE'
-
-            # A URL to the main website for this project.
-            ProjectUri = 'https://github.com/j81blog/J81.PSScriptTools'
-
-            # A URL to an icon representing this module.
-            # IconUri = ''
-
-            # ReleaseNotes of this module
-            # ReleaseNotes = ''
-
-        } # End of PSData hashtable
-
-    } # End of PrivateData hashtable
-
-    # HelpInfo URI of this module
-    # HelpInfoURI = ''
-
-    # Default prefix for commands exported from this module. Override the default prefix using Import-Module -Prefix.
-    # DefaultCommandPrefix = ''
-
+    Write-Host "Testing Gist update at $($gistRawUrl) for version $($Version) in channel $($Channel) to check if the version is set and contains release notes."
+    try {
+        $json = Invoke-RestMethod -Uri $gistRawUrl -ErrorAction Stop
+        Write-Host "Successfully fetched Gist content for testing."
+        if ($json.channels.$Channel.version -eq $Version) {
+            Write-Host "Version in Gist matches the expected version: $($Version)."
+        } else {
+            Write-Error "Version mismatch! Expected: $($Version), Found: $($json.channels.$Channel.version)"
+            exit 1
+        }
+        if ($json.changelog.$Version -and $json.changelog.$Version.notes.Count -gt 0) {
+            Write-Host "Release notes for version $($Version) are present in the Gist."
+        } else {
+            Write-Error "Release notes for version $($Version) are missing in the Gist."
+            exit 1
+        }
+    } catch {
+        Write-Error "Failed to fetch Gist content for testing. Error: $($_.Exception.Message)"
+        exit 1
+    }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBFMDahyyKAZdDW
-# s52aIyAJSDWdiwbo6/Aky/4tUk4R+aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAQlMulFE7EtLfJ
+# 6wOYHQ9+ylDZqrzA37lbbr+HYmkCnKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -308,31 +263,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCBunO650AkM3f75H8/Oj5ktpvtyG0RvaoJJrhQgLlHP
-# LDANBgkqhkiG9w0BAQEFAASCAYCiaDyEfO/JgZEwGgcbvOcFfaWqC8Gn4LVSFsQi
-# gkmu6/Ha9Dd9AfXyRfIZfgjy/9OPntgrNJ3gtcJXeGL4aAj+2PEjy04c3KaR43kI
-# RTh5BdBO9rHwT+Lbeb+/2c2Azf/Y/wLUA2VUW2qvr3bgw6g/c6SArE5zLZSkUKSr
-# UwO0SvNU3eKxGMxoVtkqpcOJqfPJcVjCNKqRlnn+sORF5sVOeSw8JjGd9/iiHg3B
-# FYqF12BNcIz9c0qqXZQj48idn6DckafiD1J7W+eXZA9e3kOrgi9lB3Q/EGUM1bUJ
-# TJ6NEaJkR+TRrTnEByWwspiDDbZbsY95KT1+8ZBCanTtuCPCyJW2/+EbHrhUyygg
-# dK6hnnr1jM+s/2XCDoDerzCCLZTBiyqyi+qsg1Al9Y5MypiXW+eVu/dC8Z9joN6Y
-# 73myp1GvtQPA6subVCiQ6MPkRQRjo/vay5gV3zwFqkDsYvc7hsFALAqyt93lGik5
-# E1/Adp7Gquf6H5AYNInGQLYfpvGhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCoSAklD7lsrTTEA1BePzMZUyUfOYiaWEdVGjkI3c/O
+# cDANBgkqhkiG9w0BAQEFAASCAYCnrlXBnyOKFZED98E1Brs4DJPHstzN4w+BUwZD
+# 5pnEBik3NQTaLQ+gSpQzRN6bBWWbao9Pl7EwTQQGdsp9TKwSLFdfS2bI5icG2oQL
+# 4baY849QLqa8oTVnWGDPFyZmdD0q89R2pAd6KjMOmW9Ku4fe6gtYKMEBuvUeBfCJ
+# CA0Xj/IeCAbuCVw0SAfMNJ4W9UJY/rCXa2GttptkgbqB+RR8rSsYgFsgWBkBqOkz
+# jO3FvvwfMCElHo/Nm+ZBdFlCotG0Sd9z8VzjCVeZH3+tX10dQc1tmSQSfKh+xrCA
+# pfsll0thBA5tDpWPpjxeay6++TNx+doE7K3Ps8pg7CaQO6F1wCQ1nE7KVH+55FMB
+# XBofbxiIVHd+vE4NtCo68D3RhSFlgvxwWJr5Jq7bCJ9RRGSQWXJh8ZhELAS4vKTt
+# 33Ucl158/H4VhjlEwC0ktQnzHEOMvlsJ3z6S2Cf4tplceUuK29l6Q9Q3fBzI5xxF
+# M2R+X4vTcQXHV5ZG2G7/DzNHSs6hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxMzMxMjVaMD8GCSqGSIb3
-# DQEJBDEyBDA/yUMYZjNvhRndCzOAgAN7hmiE8Bf0hZLc0IfSsFxEhVMDNVuXvwVQ
-# Ixe4xJk22MwwDQYJKoZIhvcNAQEBBQAEggIAH9bhDaMIU4/QJ8MOBxxVookiIq3U
-# qXeZjH9XxfGqgKjVb6cYMadliCSV69KayzKuHy2DB7pIr8H8pMLO4GaHsGtaZ/QT
-# rM+kGAZ3zIWkqcsoctlpxjyAmzc1io1OtNenEfxilcg9nxd3swRRBvMn6EAr5+uu
-# RfPm0lBpc3C71dhjgg1BdhOMFB1paYEnxQ3T0R/YplPF3hfl7T1/ZbPYF1cWXfnX
-# I97umPNTFkhL3ltzlvAsbc9IztoGe2WE78LAOamhCxA5IK8wH0+MQUuAFMlcGD64
-# L6MmYs3dfi01N2Qhq5kyOErh2jfoGNUsQdOPdt7PRGZBwR5+zD1LPl/ikO1/uuE1
-# e8o6xsWNgNvYR5UX7cr+yjmIwEqPYql9gJwbT5UChxI9mWUqHKVRbV4PL+Ja8zn0
-# liHFmqsvm3svsbNFkRdTubZA2E58UWyfAXDIKNCEVpRdubTy7lIDEZRYOemdXGLY
-# kEuoKh3Qky5eGbk6mYyksscbliD1vh2/g1DE2MD8LhzGeC2KOrBBqM2qPGlio/es
-# uPw4x4B1t+Tj3MzY27PUoe6Ljeh3os5YMQ2dwQ03kGdg2+O9jgiCMkarPiYaEp8t
-# MBmf+0o3J1C2rL05q7tR6aLyMAriMeUeVzhurwmVZoMwl9nhIJuorQnPio/fRdo9
-# 6IK6Oe953iF0rQo=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxMzMxMTlaMD8GCSqGSIb3
+# DQEJBDEyBDCA6ooqg2m9oXUgmoNIiKh58+Eh2FuyJfJuwxg1m6CE8QtKjx7T/HIq
+# DDlWMbB6aGwwDQYJKoZIhvcNAQEBBQAEggIACWY5mgfq39E1yLSV7qr1pGM2Ew96
+# cdHf9vAXUbETA+UVJFItNDF4y+QifoNYdnfnWf390vkCt+6FaxcqTNxKNSrxdzfP
+# OTFZpdYKqTiIIWpb1Tc7DZMar6/L/nTe0YJ25FXtlh1dmX4nEXCVgQEWy1Jlxt0Y
+# OmLvBWcpZs7LdfzV8cubxUoanNNmnOR0MvfgOHR9PdkglCi0p5qXbXm+xDe/GcxE
+# F8zn4t9nwPU4XiNlS1gC6TQNoT1dRcm0xON8VUKjNtvgNyYl20mB2aemvgXo23Bt
+# vyQJQdq3aclEUmXl8AtrPRp13mjlTGZnV81WfjCeBa7qkO9fpaOiLQDTx/iZ8LDc
+# zD3PzBrh7roggUZVqLdfcO7K42BoRFyUI3QXqvssHGsZW896nBMX0z24ZtAGKFj/
+# If9/SGS6VjAHMa+QLp4C90jtUrKAoTqb6suEwaN+dZtYl5CB3WWz8lcQEMd0Q3y1
+# O2Z4iSJc5UQJc2xGMYBS4CAgyLlGkPnLZDiZyMrK6EvSKmu0L7l0f8JqCepOC6LQ
+# 7aNs99YTDiaUI2SWxA2hIHxvnROKok5G7gwmEpCX6/jKvBdmS2RBL1VJed90DGto
+# 6ECcsul9FjOVwlpQDBgu/BL7H4PUCuyATPERupFbsTiPikIlwP75Z6/tq8old6UI
+# 5kqf7ys/XkzYNXE=
 # SIG # End signature block
