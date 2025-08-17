@@ -26,7 +26,7 @@
 
     .NOTES
         Function Name   : Set-GistContent
-        Version         : v2025.817.1545
+        Version         : v2025.817.1705
         Author          : John Billekens Consultancy
 #>
 function Set-GistContent {
@@ -55,12 +55,13 @@ function Set-GistContent {
 
     Import-Module -Name J81.PSScriptTools -Force -ErrorAction Stop
     $UpdateDateTime = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $owner, $repository = $GithubRepository -split '/'
-    $gistRawUrl = "https://gist.githubusercontent.com/$($owner)/$($GithubGistID)/raw/"
+    $Owner, $Repository = $GithubRepository -split '/'
+    Write-Host "$GithubRepository => Owner: $Owner, Repository: $Repository"
+    $GistRawUrl = "https://gist.githubusercontent.com/$($Owner)/$($GithubGistID)/raw/"
     # $VerbosePreference = 'Continue'
     try {
-        Write-Host "Fetching and parsing JSON from $($gistRawUrl)"
-        $json = Invoke-RestMethod -Uri $gistRawUrl -ErrorAction Stop
+        Write-Host "Fetching and parsing JSON from $($GistRawUrl)"
+        $Json = Invoke-RestMethod -Uri $GistRawUrl -ErrorAction Stop
         Write-Host "Successfully parsed Gist content."
     } catch {
         Write-Error "Failed to fetch or parse Gist content. Error: $($_.Exception.Message)"
@@ -70,24 +71,26 @@ function Set-GistContent {
     # Get the new version info from the previous step
     Write-Host "New Version: $($Version), Channel: $($Channel)"
 
-    Write-Verbose "Retrieving release notes for version $($Version) in channel $($Channel) in repository $($owner)/$($repository)."
+    Write-Verbose "Retrieving release notes for version $($Version) in channel $($Channel) in repository $($Owner)/$($Repository)."
     # Retrieve the release notes by name
     $params = @{
-        PersonalAccessToken = $env:PAT_TOKEN
-        GithubOwner         = $owner
-        GithubRepo          = $repository
+        PersonalAccessToken = $env:GIST_PAT_TOKEN
+        GithubOwner         = $Owner
+        GithubRepo          = $Repository
         CommitName          = "v$Version"
         Github              = $true
+        RemoveSubject       = $true
+        AsArray             = $true
     }
-    $releaseNotes = Get-GitHubCommitDescriptionByName @params -ErrorAction Stop
-    Write-Verbose "Release notes retrieved: $($releaseNotes)"
+    $ReleaseNotes = Get-GitHubCommitDescriptionByName @params -ErrorAction Stop
+    Write-Verbose "Release notes retrieved: $($ReleaseNotes)"
 
     # If a changelog entry for this new version doesn't exist, create one.
-    if (-not $json.changelog.$Version) {
+    if (-not $Json.changelog.$Version) {
         Write-Host "No changelog entry found for version $($Version). Creating a new one."
 
         # Find the previous version to copy dependencies from.
-        $newEntry = $json.changelog._newversion.psObject.Copy()
+        $newEntry = $Json.changelog._newversion.psObject.Copy()
         if (-not [String]::IsNullOrEmpty($newEntry) -and ($newEntry | Get-Member -Type NoteProperty).Count -gt 0) {
             Write-Host "Used the template from the _newversion entry."
         } else {
@@ -101,8 +104,8 @@ function Set-GistContent {
                 notes              = @()
             }
         }
-        $json.changelog | Add-Member -MemberType NoteProperty -Name $Version -Value $newEntry
-        $json.lastupdated = $UpdateDateTime
+        $Json.changelog | Add-Member -MemberType NoteProperty -Name $Version -Value $newEntry
+        $Json.lastupdated = $UpdateDateTime
         Write-Host "Created new changelog entry for version $($Version)."
         Write-Host "Last updated timestamp set to $($UpdateDateTime)."
     } else {
@@ -110,26 +113,24 @@ function Set-GistContent {
     }
 
     # Update the 'notes' with the body from the GitHub release.
-    # We split the string by newlines and filter out any empty lines.
-    $notesArray = $releaseNotes -split [System.Environment]::NewLine | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-    $json.changelog.$Version.notes = $notesArray
+    $Json.changelog.$Version.notes = $ReleaseNotes
     Write-Host "Updated changelog notes for version $($Version)."
 
     Write-Host "=========================================================="
-    Write-Host "New Release Notes:"
-    foreach ($note in $json.changelog.$Version.notes) {
-        Write-Host "- $($note)"
+    Write-Host "New Release Notes for $($Version):"
+    foreach ($Line in $Json.changelog.$Version.notes) {
+        Write-Host "=> $($Line)"
     }
     Write-Host "=========================================================="
     # Update the version number in the correct channel.
-    $json.channels.$Channel.version = $Version
+    $Json.channels.$Channel.version = $Version
     Write-Host "Updated $($Channel) channel to version $($Version)."
 
     # Convert the full, updated object back to JSON.
-    $newJsonString = $json | ConvertTo-Json -Depth 10
+    $newJsonString = $Json | ConvertTo-Json -Depth 10
 
     # Prepare the request body for updating the Gist
-    $body = @{
+    $Body = @{
         description = "AutoUpdate Version Info - $($Version)"
         files       = @{
             "$($GithubGistFilename)" = @{
@@ -138,24 +139,24 @@ function Set-GistContent {
         }
     }
     # Prepare the headers for the API request
-    $headers = @{
-        Authorization          = "Bearer $($env:PAT_TOKEN)"
+    $Headers = @{
+        Authorization          = "Bearer $($env:GIST_PAT_TOKEN)"
         Accept                 = "application/vnd.github+json"
         'X-GitHub-Api-Version' = "2022-11-28"
     }
 
-    $gistUpdateUrl = "https://api.github.com/gists/$($GithubGistID)"
-    Write-Host "Updating Gist at $($gistUpdateUrl) with new content."
-    $response = Invoke-RestMethod -Uri $gistUpdateUrl -Method Patch -Headers $headers -Body ($body | ConvertTo-Json -Depth 6) -ErrorAction Stop
+    $GistUpdateUrl = "https://api.github.com/gists/$($GithubGistID)"
+    Write-Host "Updating Gist at $($GistUpdateUrl) with new content."
+    $Response = Invoke-RestMethod -Uri $GistUpdateUrl -Method Patch -Headers $Headers -Body ($Body | ConvertTo-Json -Depth 6) -ErrorAction Stop
     Write-Host "Gist updated successfully."
-    Write-Verbose "Response: $($response | ConvertTo-Json -Depth 6)"
+    Write-Verbose "Response: $($Response | ConvertTo-Json -Depth 6)"
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBllGFGtrsSgm2z
-# yKngsgFRWYPMFgT9+aAQK8yRzS9QKaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBC9I+SbnZMHmHP
+# HD4j/ilQ8Aifd/3+t1LN7zlPTzqR1KCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -331,31 +332,31 @@ function Set-GistContent {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCCzYo2P8wwWgFvTSfB8tuBOwSH+XG3JaOfaLLMkp8We
-# qDANBgkqhkiG9w0BAQEFAASCAYBaFZz0NFCkgYKjag9sk8FvZiIU+h2ivKxzQejW
-# KXBdt7A30/PCmVmV0fTrk/RG8vxaEWbwACmqQ9nsAcHy346tV1Har44rgX3BQnvH
-# R+FmTypde+IIftIhgxGIMEZIaUxzYJo5ZLI6qagKF2Xfun0nvEafUQ0Qbt/beXJb
-# cNvR/hL3cbedbc4HDj1rFJmpNyo86hJ/5JcSEDEDUpMivHGCl1IvBh2jl6bg6I04
-# N89xmUTzdnDulLkq3a7HcOKh/uaoB2Qn2kAMwfYJcAzeUi/LHkUwZp3IRHVcv4Zy
-# n5yL4dTZA8AojYk+aITcs3ZF4yMi7c8iqa7NpIWYr7Nvc4I50UU8oB9htrq7fZs/
-# hfJiNW35voKwkLsZn8I5Q1RMI3GpNQET7JZTs+Hs7paCIUl7d8XKHgf6dmrwl3zm
-# JqYF0Lt8qPnbap3ChDUzqNJwrqWTdc8L9k2qVhE7oVmsNQ8QcYuSoJ5OrMzhuDzq
-# e8yIclRbCwlxvcdTWGtGG1SN9vuhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCA59igXrC0abhIQIQFJjgAZxagA8AIwhIMS6h6FvusW
+# /jANBgkqhkiG9w0BAQEFAASCAYARlLyseiogRFv2mZ5lAeomRG1jSD2jy7qROrex
+# 24AQZS2Ajv+0Wn/XwfcHbhcm5qHkiIWiT42G6pHhq/mtYIjYyg6A69dg9RN3xHMP
+# ZKIEcfjDJUOjjRj4XXmzZb8WPRfH0cQXuLaTeK9CJ+cVc1OG+aLnZESprZ5XfEup
+# /03eZQkDGop1jiKg7BovUvRx9p/uaU5JEC4ap2KmGFuLWGWVj+kMOGqWbymIDWHk
+# Ncw46d7jKKvQcZdH6RErKmqCM8wp8ywn1YmmX09RT+jtiQVW4oWmuDXB/MSBN3iR
+# haHCmOL97eZlwL4Cx5d8kgm3HJmu6iJmSxAVYTSrcsVPdtwSf+Fo3sK9kq2sgbXT
+# 2xR5f6O6k4PoskxJGmywBpuLjvar7zsk9P0bi9loO/5gmY4VFkMz3IuoWp7V7smO
+# W1xOuSXWscMl5ekKEoNa5NXstsc4BjL1i/Vjjms0DnHNDVtln2QUVvx3RhIas5yl
+# pn6iwEfXL8oDzRF6qU/orlzx9cShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxMzQ1NDVaMD8GCSqGSIb3
-# DQEJBDEyBDCrAOASJhKcQChqS0wE5HFTst56+oli3pWLfioma3AH/BwNuY9iOEEq
-# VP7YHvlbabQwDQYJKoZIhvcNAQEBBQAEggIArLBYqhsJOSlQ7Gd4l5wxnzMI2yrR
-# caJUwVqZ0ACQdPTe+Qi8SWpdkfyK/8Liq0tMkMACwacKt93uqCB2KtuzofXDg1vL
-# /NTyp+CarCMj41efYbUw5lQAyGw3ohEZ02u0Ch2HfPe75cGfKwgQASQmmPzI9dLL
-# DV+ZAsY5xBWCtEyuc5xwm9G7claWCBnFIZE7ptC2K2slLILkgW8Lb2BTWrKYA1HB
-# scMSm7vfsRqM4g/LY6fL/xzzaA6K33Yyokwuo+B7gNQzakwRIEM+HA2W4O7xJaFu
-# WtRcwsj8Obka3cEcopfvs2CxNro0zYkIGOgOvMblVBOOXptQztnPKmwsp8zr4tsi
-# uXVia8Tp73VIFMgQDIJgaSU7igKGFVyE0JjAfQGALqo0+vJNqfcPWLOuJyRY6nVz
-# ltCHbQ0iqzSHSosS/Gw4nRt8W4LN/Kf32Au9pcwyQ2zX9z5f5kgT4Bzg/6iuCtcg
-# EEiSWCX7LZBTSUWQOBttqU4nlpLfgMPfIStTP2VDBAUN+Z0vfT0xwgTWSJMaaIqt
-# tN8HEoEGkKBHY57fhktB+W/iIkoor+RVuT8qv2bFLZlx6JfrGj9LGIFjjTeEWA1z
-# UMFXTA8Uu8fUnt1WsiXtMNuiSGeVyd9ecc94vZr458zL/pWiR3IHwX8sU0SouizB
-# eUL2KZF3dNI3Lag=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxNTA5NTlaMD8GCSqGSIb3
+# DQEJBDEyBDAVkeaZ++lZXRuvyglEyr+c1zhOaqs3TVb2FWD5LFTJLgnjtayqo6mb
+# 91qfRpOiYPcwDQYJKoZIhvcNAQEBBQAEggIAw2MzEfj4psEJWN7qqttT1ncfvuB+
+# BxhcBr/IC3PnPHoZDJ77CxMez9cVCFnXg2nm/xcm401mR9kdIfLZ5wUztKYvF9ty
+# yuktqi+d4ERtUs32MBK8Wmc3ryYhuuG7nCD4cIgIUN496Ae+Me7o7vZS88TVlX09
+# YRP41DrNx8NwXYnDcJ9mnwx0+IZ3ACIMD0zRQ3R7z6543kuib5Bgse0wcLtz8GXu
+# pqDx0H4arG1FgXySiV3Px80C1n4j13HL0Ofre9+C32JaL4DqRp+KDBe7L56axTMW
+# /M4Oqs42dOMRrp8Eg7n2CECXV5fwkUyRnk878owd4x+tvwDSyMmm3jzFtP23AcDD
+# anHSx0R4LD5+RiVcVNuEQvJ6KnAxpoF5zbMsJRDHsr9S8BI18D5qs8Ak++tK1Kz7
+# cRYB+/p+6UN4GGC+v8yn3US/DC12CX09vetHVgPf3erCh9iwJuxuTjQYMTmPbgza
+# FXIHUvjDux96zwbvh/gbL0yJtzkhVVarzWGUB03wtag+EorOFrE0DbEGaR9FcsEO
+# rvAY2BLV941sPzO8CjieSt+xXQa/hZprwR/xvfE56/gKGp/IW7irbg3/wwGaeorb
+# 9o7Fgl3k7Yayr5iVP7XNuEZQu+40lnhinIkjyXcssr69Z/rdPbQgss6tRbxj0jzG
+# mhpgyRwFv7CLPoU=
 # SIG # End signature block

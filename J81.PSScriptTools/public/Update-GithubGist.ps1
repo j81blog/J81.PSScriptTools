@@ -48,7 +48,8 @@
 
     .NOTES
         Function Name   : Update-GithubGist
-        Version         : v2025.817.1545
+        Version         : v2025.817.1705
+        LastUpdated     : 2025-08-17
         Author          : John Billekens
         Requirements    :
             - The function reads the PAT from the environment variable PAT_TOKEN
@@ -61,62 +62,63 @@
 function Update-GithubGist {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [string]$GistId = $env:GIST_ID,
+        [string]$GistId,
 
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [string]$GistContent = $env:GIST_CONTENT,
+        [string]$GistContent,
 
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [string]$GistFileName = $env:GIST_FILE_NAME,
+        [string]$GistFileName,
 
         [Parameter(Mandatory = $false)]
         [string]$Description = "",
 
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
         [Alias('PAT', 'Token')]
-        [string]$PersonalAccessToken = $env:PAT_TOKEN
+        [string]$PersonalAccessToken
     )
 
     # Define the API endpoint for updating a Gist
     $apiUrl = "https://api.github.com/gists/$GistId"
 
+    Write-Verbose "Updating Gist at $($apiUrl)"
     # Create the body of the request
-    $body = @{
+    $Body = @{
         files = @{
-            "$($gistFileName)" = @{
+            "$($GistFileName)" = @{
                 content = $GistContent
             }
         }
     }
 
     if (-not [string]::IsNullOrEmpty($Description)) {
-        $body.description = $Description
+        $Body.description = $Description
     }
 
-    $bodyJson = ConvertTo-Json -InputObject $body -Compress -Depth 6
+    $BodyJson = ConvertTo-Json -InputObject $Body -Compress -Depth 6
 
-    $headers = @{
+    $Headers = @{
         Authorization = "Bearer $($PersonalAccessToken)"
         Accept        = "application/vnd.github+json"
     }
     try {
         Write-Verbose -Message "Updating Gist with ID: $GistId"
-        $response = Invoke-RestMethod -Uri $apiUrl -Method Patch -Headers $headers -Body $bodyJson -ErrorAction Stop
-        Write-Verbose -Message "Gist updated successfully: $($response.html_url)"
-        $rawUrl = $response.files.$gistFileName.raw_url
-        $htmlUrl = $response.html_url
-        $gistVisibility = if ($response.public) { 'Public' } else { 'Private' }
+        $Response = Invoke-RestMethod -Uri $apiUrl -Method Patch -Headers $Headers -Body $BodyJson -ErrorAction Stop
+        Write-Verbose -Message "Gist updated successfully: $($Response.html_url)"
+        $rawUrl = $Response.files.$GistFileName.raw_url
+        $htmlUrl = $Response.html_url
+        $GistVisibility = if ($Response.public) { 'Public' } else { 'Private' }
         return [PSCustomObject]@{
             GistId       = $GistId
             GistFileName = $GistFileName
             RawUrl       = $rawUrl
             Url          = $htmlUrl
-            Visibility   = $gistVisibility
+            Visibility   = $GistVisibility
         }
     } catch {
         Write-Error -Message "Failed to update Gist: $($_.Exception.Message)"
@@ -127,8 +129,8 @@ function Update-GithubGist {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDhXopQufawd1BI
-# 9ye8oSL4xjngwNfQ3gF7qeR86wlQVaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB09SVU6BVPyLdg
+# jEf4bPdvUhy0F80BfyChTHJ4hb136KCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -304,31 +306,31 @@ function Update-GithubGist {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCALt5xnmuODDqadnozx6R2ASuavjbmX95TnAXXLLGoc
-# kzANBgkqhkiG9w0BAQEFAASCAYA7cTvFIy2lmwMU61/4rJ9IgeG0FOS9C2MHZNGX
-# 8dRqye0vkMJrxIuth01r234+aNBA1bNuGdG8nNnrmYvgYkJkyl254NdaDL/iQjWk
-# afQz7bDd0U3602MMXqYoJGKeWePs+Ta2kFT9TzR2NOY7KXLXf3WWVbuLgGw5CJ9u
-# OLC7XGf+2oA0+zDhBTZBI5Uqu3UGUaNHDS8oX231gtZAJMWOXehOVupySMBlXNWe
-# Q9z6nM2e/I0WKB2H95H63n7WGQLyHZke3mesJmfgPsL9S7xVwufby9qDGxUAxMsi
-# cdxd6TkCdGHWt0Dm9tanMLusl4JXXCqcjbbeKp2ILmHZSPLOmKUI3BTEj6YjNRt6
-# ftHA2dHySMNnhLKB48BQKz36dNouKh15myWa2gtUwrZTU/QpqSfjJw6qfcdMqOpX
-# 8jADF+rc7yeNx38eR0nFjRkBq4telhmrfo3ZSiKYIv9IVdWLd2aurJh4XnP0aEMS
-# Plc2sxJudGjHNVRarVVDlopWDoqhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCB+jE1b8hY+N+P03kduQW/Y100VQehtUPYrzOvfKpcc
+# ajANBgkqhkiG9w0BAQEFAASCAYBA9X9zblPeslak74Or60L7K2hQ2w/cXSpSHF94
+# BGMshH2gg88OJmEW0D4IglhJybmWAlAR1LsiTaTmgih8Eb8TXIi8nghcyLOgPU6O
+# iWw7ZCtqJ2g9lk9Vz9lUwjCxela8rsqgUznN+r7x2niVydMrF2LQfYQfh1kdpcLo
+# BbBxbfD/qR59Umm39JLBmaQdagtdLMxkargafEOtOq22GIitcEIxKcNzRf2OrFFA
+# Ft/9/L7A8NGiafAgJ/Wr/xa1Kr80FaZwnYYVBMLOfOFzvjkMNMQKtk1ms4LdwWJH
+# nbUUun4ndYhJCrX7PYttqb+IvqwFPgbvkQWGYzcLQeFkUVLZZ2mtawQ1b8P1N8Kg
+# C2JGGOLjXvNo/9lrUpSDcEZBs/ey6fMqnXhhe1uS1mXCO50F1p/1/Kkm121R+pNW
+# NAUxC4JstUw6AHr3z8PTreBk8FVN5mD6HJ7Rg5rbFOMgdQxCpvqh3A7dOp+XS9Gi
+# AhJSFtxNV6v/joJ+v7SoatgbGGmhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxMzQ1NTFaMD8GCSqGSIb3
-# DQEJBDEyBDC91MnjGyRUxgN0kA8Ey1vqqO44u7Bc/NrdEp71tqpQF8FyCSay/xdI
-# iOcorRMd2oQwDQYJKoZIhvcNAQEBBQAEggIAxhd6NTMDbHNRb660bwNqpgRf+T4e
-# SSvcW2p5I9H+7kekrnk7QzNKSJnstilXt5PCcSlN4COiU+RkJdh7FeN4kxZun+Bi
-# OI2U6QC0aCkP8xEdjH+9ewoZq3NjLvSqV32tcxPUciODjn0h22/bSRplSH95pmxL
-# UfaNBkmdQwjmUEO6/O4NrzD7SK2AhHlBlz805xKJyp1RQLuU4v+1usZOjzchpMHl
-# XCCdtLLmUiovEP2KfDBhcAdrXzdEAd/bACzYTwNC1OAxBuAVvn54dBm57DrUL0iC
-# P7mpSvEVP4BXAiGWCffguyNYuDJRgL93xc9SH+1ukBUyE16JQ8OSROnBgjazv7M4
-# M9NbKUeYsGmA2vwpsLEqrijwK8rYvDj+sshte6joGS2fSgly3twEEsuoX2sFTSNX
-# sI9dBP2+yH4UWB43LlMcEwppsolG8xamDIHL1RVORCjQ6pglCVjA3xQm/QoariKW
-# HmT/cS+VCrDHVA4qiESNxGY3rr2aoxUpkuZRNTRXSTp02jB+bTDwkMkOxi2bU+YL
-# zPgFFO/mmSAnapsteqmsq8P29uy2ZjeB0pPxV7dB9lvDO1w/TPTamUg2CV2lfQ20
-# CYYRlwpFoStNQGR1hI++kgLKmKzGNh9nzoFG8dpbPDPKWK8mTL5quWJj46OUVjTv
-# q6GQr/XFvNQkje0=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxNTEwMDVaMD8GCSqGSIb3
+# DQEJBDEyBDCUwedV5iqV0zaRacpgJLjPmC85tI66VncgP0FeLIAJTAK6EkWbBGIt
+# Zd3Gy/yoZ8QwDQYJKoZIhvcNAQEBBQAEggIAwrS/8rYr/p7hGn/vkGxyP08dOVJI
+# jNpuaxt7nGHRlOal1QO4vHcSqhVH1BW7P/fYXm6m8t1mwATuu0vJqswaRIq/OHB0
+# HMku5oG40NhcNb6FTpqq7378v92p1mBqtEVPqWF5bv3u7lyq7y1B8+1nydI45VPf
+# Ut0LAn/O1F6GHP4YckV0Ch6gZlfET/JWLNwefFIwAalflvucVbURvaAa8zubtlHN
+# zSNa++F2Y28GcsZfpPyattyntQzlP/0Rise8EQmLC01GpxaloCSzTnnjEYMm7lJO
+# vxvh79PyxXMxMxPAEapUmnVUpQvVYqCMFocUSUJ1pTlfuqrEVzXtv0gHcPsto3Z+
+# GrVbl9jPmcVV7t9KvEdGM7MpNHMNIvFzd+p/Cdqk7Qxonv57HyJY3sqNMgvgcAg5
+# 21AASBb6JX3fyxGWPZeaYxu+q5L6ZVsH7KYFyEzKMxVF22UIk/yi/NlcwMda/nfy
+# vVh6kNIaUMhKD3lY9XXkZp3DtOyA2YOvZHO7P1QN7Mzmq/OofgO4e+M+YfET2KrL
+# CWKy53LlGQhJDXY2Z0T4G0A2TF+hBxB42Xbj7n7J+gmWmu4UrkSpbGGGiKi0KfTN
+# plS3oKn+iZTuSb1lfw3SMw739KqKXMESKhlGFU5/a7g55adkQrGLypdJPbCB0zhn
+# WuxuFFDdYLLSrYU=
 # SIG # End signature block

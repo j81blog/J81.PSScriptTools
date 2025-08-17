@@ -1,34 +1,34 @@
 function Get-GitHubCommitDescriptionByName {
     <#
-              .SYNOPSIS
-                  Retrieves the full commit message/description for a given commit.
+        .SYNOPSIS
+            Retrieves the full commit message/description for a given commit.
 
-              .DESCRIPTION
-                  This function fetches the commit details from the GitHub API
-                  for a specified owner, repository, and commit (SHA, branch, or tag name).
-                  It then extracts and returns the full commit message body, which often
-                  serves as release notes.
+        .DESCRIPTION
+            This function fetches the commit details from the GitHub API
+            for a specified owner, repository, and commit (SHA, branch, or tag name).
+            It then extracts and returns the full commit message body, which often
+            serves as release notes.
 
-              .PARAMETER PersonalAccessToken
-                  The GitHub Personal Access Token (PAT) used for authentication.
-                  It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+        .PARAMETER PersonalAccessToken
+            The GitHub Personal Access Token (PAT) used for authentication.
+            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
 
-              .PARAMETER Owner
-                  The owner of the GitHub repository (user or organization name).
+        .PARAMETER Owner
+            The owner of the GitHub repository (user or organization name).
 
-              .PARAMETER Repository
-                  The name of the GitHub repository.
+        .PARAMETER Repository
+            The name of the GitHub repository.
 
-              .PARAMETER CommitName
-                  The name of the commit to retrieve the description for.
-                  This can be a commit SHA, a branch name, or a tag name.
+        .PARAMETER CommitName
+            The name of the commit to retrieve the description for.
+            This can be a commit SHA, a branch name, or a tag name.
 
-              .NOTES
-                  Version       : 2025.817.1545
-                  Author        : John Billekens
-                  LastUpdated   : 2025-07-05
-                  Compatibility : PowerShell 5.1+
-              #>
+        .NOTES
+            Version       : 2025.817.1748
+            Author        : John Billekens Consultancy
+            LastUpdated   : 2025-08-17
+            Compatibility : PowerShell 5.1+
+    #>
     [CmdletBinding(DefaultParameterSetName = 'Github')]
     param (
         [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
@@ -45,8 +45,16 @@ function Get-GitHubCommitDescriptionByName {
         [string]$PersonalAccessToken,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName
+        [string]$CommitName,
+
+        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
+        [switch]$RemoveSubject,
+
+        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
+        [switch]$AsArray
     )
+    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
+    $OutputMessageLines = @()
     try {
         $headers = @{
             "Accept"               = "application/vnd.github+json"
@@ -58,20 +66,29 @@ function Get-GitHubCommitDescriptionByName {
         Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
         $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
 
-        $fullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($fullCommitMessage)"
-        if ($null -ne $fullCommitMessage) {
+        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
+        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
+        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
             Write-Verbose "Extracting commit description for '$($CommitName)'."
             # The body of the commit message is everything after the first line (subject)
-            $messageLines = $fullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            if ($messageLines.Count -gt 1) {
-                Write-Verbose "Commit message has multiple lines. Extracting body."
-                # Skip the first line (subject) and join the remaining lines to get the description/body
-                return ($messageLines | Select-Object -Skip 1) -join [Environment]::NewLine
+            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
+            $count = 0
+            $pattern = '^\s*[-=*]+\s*'
+            if ($MessageLines.Count -gt 1) {
+                foreach ($Line in $MessageLines) {
+                    if ($count -eq 0 -and $RemoveSubject) {
+                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
+                        Write-Verbose "Commit message subject: $Line"
+                        $count++
+                        continue
+                    }
+                    # Clean up the line by removing leading/trailing whitespace/dashes
+                    $OutputMessageLines += $Line -replace $pattern, ''
+                }
             } else {
                 Write-Verbose "Commit message has only one line. Returning as description."
                 # If there's only one line, return it as the description
-                return $messageLines[0]
+                $OutputMessageLines += $FullCommitMessage
             }
         } else {
             Write-Warning "No commit message found for '$($CommitName)'."
@@ -81,13 +98,26 @@ function Get-GitHubCommitDescriptionByName {
         Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
         return $null
     }
+    if ($OutputMessageLines.Count -eq 0) {
+        Write-Warning "No commit description found for '$($CommitName)'."
+        return $null
+    } else {
+        Write-Verbose "Returning commit description for '$($CommitName)'."
+        if ($AsArray) {
+            Write-Verbose "Returning commit description as an array."
+            return $OutputMessageLines
+        } else {
+            Write-Verbose "Returning commit description as a single string."
+            return $OutputMessageLines -join [Environment]::NewLine
+        }
+    }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDo/y4tajhKkf6K
-# LOMKsi6IaCPlPHqj3AstIxvrXCCGlKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBJF8Czgke20KrC
+# QgxUHYrG7fXWqVYvdNBhYjOJ/W76f6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -263,31 +293,31 @@ function Get-GitHubCommitDescriptionByName {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCDiycT5Yy3jUEFmLukCDvamlBuRRFrVhZSR9lbhacqz
-# yDANBgkqhkiG9w0BAQEFAASCAYCsqfyH++0Xn0TCr3w+LFbAHi8nq6gadLLbuGs0
-# bEzoHqkxpYQcHG4MjOT3Lp180jjcHN6u/Kz2yv0jQrR/cPGj1G2xwD0B108yuqvU
-# Tqsthpw1P/yKuDcHXdhapTZASGkqEqFV8cAG63VBEfN/zdggGwTS03BPwHluaMe0
-# SBFohcAPNj/9xPznbs7tD5FUO8Hc0owa5p4sZQAFjeYDTAaa+a5fus2uh/JXefSj
-# 1jAGYg4W4ZR00BMKncVeF50aB14/PRG+uepHg1sgMFCn3uBOwulEeBCuh+VXV3PU
-# xmRqyOgHNiMZvs0SIjPjl+hlI3SN2VjFZI0HX13vDn3PEghlTQq4ZReVjnBTE6/D
-# UYct/udFk/u0+g83lNRYxQmv+yhO7ovwN+okuJq0pCDZrWcHNpqHgGZYOLwWB1d3
-# Hph6Pd8CDiFIfb4+uSAjfrJ7EKWe+PM/fggx1Joe+ykPaXA6BcEEZ5ldmnC93jTa
-# scKia6IzKtS3f57LODzYQY4poy6hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCBZHLrQG00yof4qT5UPUAA7uChqm1aHmfSiJ1/FmKoe
+# jjANBgkqhkiG9w0BAQEFAASCAYAy3kMI+Xmb87gkVuBjzd6TnlNLavl2ChNcn2UZ
+# QHUSZF+xAPPQRzHLTkK5+Sa7yNwkPxStJlYl9WN+XPhhnaZ2ka/1ewZw78LiTEJ5
+# 4Df8VV7SBU0D0UO9fJnAGt5xShJgW1mgJYaYdmEOZi8/ZbfRtihfzWQmGr1VmlF4
+# 361+5ECGN2fhIkUz9m5ryjUjEuj15CfnxgkDnL0BRjgm7iHz3+kERkTw2SSl3aXC
+# ILOIUjMdsA0OO0GIXrDQ26NbHS5UGrPQ1wLYfahEP9AOMvAeVe80VVlyxVjJt/sd
+# fAaBDEVlvh9wxaRRnnGZNINO5ij17kF1qU99hdLscPdmMqVTkwbrUJcIGYq534H9
+# 8lNJrDLNAqIt0/0oie8HCYaITm4GYCELFkLxJ4+2dLoJj4WtBEnqfNpjwQh1UC5/
+# TrE52d7rk2/vca62EIwkDxFVyc8Tgyk60y0gU+YgV+ZcUM6/JMY2QjW+bxwrSlF1
+# Ty9G1IWH02LyxW+hhUVeLlqJH9ihggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxMzQ1MzNaMD8GCSqGSIb3
-# DQEJBDEyBDC+N7f9VhqsbIooRgvq2Me8aPpNyk4zilVkLjM6Xm6gcZnftoa6KENN
-# 7FEymsr2mzgwDQYJKoZIhvcNAQEBBQAEggIAkdzVUFdd3udgYE6SG/F28eD8iqss
-# oJZ7rCxa9HG0KuW0/+BfBfG/1LCV1hqAS8/y/4JGl0EF8blNzRqJXVYQpKZ6uVbV
-# fy30LLv0er7UWY4ahEBTHsergTTgFfiXd5iOXDY0DRdSlHqqcVbRFBMWTTahB93d
-# TKk+yhEkhfMAERJpCjs6R+FMleZZaCihBu5gMOAL0nFzxK4XF4v5M5EaH3VH+jdT
-# 8rR9rmBzRuEFSRNHZQVxFDbBwOqOSgrKFaq+/j96rBonpuOrRf1ugjp6fHVu+8Ka
-# dJbOlLcGDsmwQDq7wS+pfkDXjnq4xDc9sgrk9A9v4INMO3iJqVbXx6II3TAwbcsY
-# 2m+xvM4PhDU/ri96u5rhtNcJedjCRa7qTbPf3e2OCvKW5N5dmy1xTTJVx+6A38CH
-# zzZAxr0YC8GCA20DEiCn01RYM+ORc6/9EIxhvr4vhXKM0Eot81yAIRpdcU++VDuJ
-# CGXWPE2suLz13w3WRkS75g5KAETOdjgYpuhTc94wzr5tOHETgL3N/8X2EEqATaSK
-# 69DRRrYmyQ0qFkr1XLPD2KJ7stUTkrd08L8P71/etOWWtbV1oNT3VzI12LwlRUEY
-# uii++FotwZhAcNE819jYt+X79GHjwzTPbGgGX6hPu5KvTYE18NBCLo8oSJKaTJOM
-# OayE59jLMBrDCnU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTcxNTQ4MjJaMD8GCSqGSIb3
+# DQEJBDEyBDCKFPXinOdt1KrYfoY4NoiLJnQXB6zSGQGZp4eW2WsDb4ON5zaJtlMd
+# 792m+Zd/YugwDQYJKoZIhvcNAQEBBQAEggIAxvKsO0KYcPain/BYQRitb/o8PV5+
+# iU2NKxN26L56ntL9FT9g7zbWoFMzTIWsIfU6ghaLgKlZSbKOQ8dZBl8H4+hYtAnG
+# 4IGsOPeWwe5PKQ5gb/2Omb/nznQy2Cm/v46/CUdDyY8+SwcljPXql9x2qs8M1rwV
+# lONI9bGwpLgSsiDDoTcKWG+AB+MXU5s4k170+bgGeIWMGMisa/YQq7vQR3+QyB02
+# 1ULnWllOrfJZGjy7wva6luPgh0yCl8gazZxq9Mkb+uUDfjcsj/rTwnI5e8UK6jxP
+# AE6RBa8EZaKiMnbf8fOxHVYPydSgmjSXnIenFuEDXM0x5iWElWZUYjhyWrdXVmPE
+# AX8TgMiH1V30JGGxLi2U4qs1vs6rC9VcAgHIsqLiAzUr7YftJ9hQJhZI3XBr7PG9
+# Xj8EZIWQ+BlwZsDwWP1CcV7AapoKU6lIW7/tqz2Fvy+DeAUP7mp+fhMjynqtUJGA
+# N25m0Zbqtx5hmk3UYqvbmUe0u+KetaiqkZkkW2Ehj87gYMsOJLcmD9HaAczY6vkB
+# PEu1j3Zxjiz7OadvHoJcCCJGUu0EZK7let7CDOIDye2MoW9fcsgBwA2pGKWQQ25/
+# P3E/8Y/Pg74uUPylO/DdypmQNtACx8lokROQRt+FMQVF9h0NAdWRcCfqQNwmyiJX
+# DrxqKaykhBiz+/Y=
 # SIG # End signature block
