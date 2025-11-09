@@ -3,7 +3,7 @@ function Get-SoftwareInventory {
     param(
         [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
     )
-    $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "Inventory.log"
+    $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
     Write-Log "Importing PackageManagement module"
     Import-Module PackageManagement -Force
     Write-Log "Module imported successfully"

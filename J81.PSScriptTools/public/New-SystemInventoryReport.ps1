@@ -35,7 +35,7 @@ function New-SystemInventoryReport {
 
         [switch]$MarkdownOnly
     )
-    $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "Inventory.log"
+    $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
     $MarkDownReport = $true
     $HTMLReport = $true
     if ($HTMLOnly.IsPresent) {
