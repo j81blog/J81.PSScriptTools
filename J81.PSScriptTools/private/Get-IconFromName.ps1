@@ -1,243 +1,96 @@
-function New-DynamicHtmlTable {
+# Define icon mappings at script scope for better performance
+# Using Unicode code points to avoid encoding issues in PowerShell 5.1
+$Script:IconMapUnicode = @{
+    "Success"                    = [char]::ConvertFromUtf32(0x2705)  # ✅
+    "Succeeded"                  = [char]::ConvertFromUtf32(0x2705)  # ✅
+    "Installed"                  = [char]::ConvertFromUtf32(0x2705)  # ✅
+    "Enabled"                    = [char]::ConvertFromUtf32(0x2705)  # ✅
+    "Failed"                     = [char]::ConvertFromUtf32(0x274C)  # ❌
+    "Disabled"                   = [char]::ConvertFromUtf32(0x1F6AB) # 🚫
+    "DisabledWithPayloadRemoved" = [char]::ConvertFromUtf32(0x1F6AB) # 🚫
+    "NotPresent"                 = [char]::ConvertFromUtf32(0x2796)  # ➖
+    "Paused"                     = [char]::ConvertFromUtf32(0x23F8)  # ⏸️
+    "Error"                      = [char]::ConvertFromUtf32(0x274C)  # ❌
+}
+
+$Script:IconMapHTML = @{
+    "Success"                    = "&#9989;"
+    "Succeeded"                  = "&#9989;"
+    "Installed"                  = "&#9989;"
+    "Enabled"                    = "&#9989;"
+    "Failed"                     = "&#10060;"
+    "Disabled"                   = "&#128683;"
+    "DisabledWithPayloadRemoved" = "&#128683;"
+    "NotPresent"                 = "&#10134;"
+    "Paused"                     = "&#9208;"
+    "Error"                      = "&#10060;"
+}
+
+function Get-IconFromName {
     <#
     .SYNOPSIS
-        Generates an HTML table section from inventory data using metadata.
+        Converts an icon name to its corresponding emoji character.
 
     .DESCRIPTION
-        Creates an HTML table section with title, optional highlights, optional description,
-        search box (based on ReportSearchable), and sortable table data based on ReportFields
-        metadata. Skips items with empty data arrays.
+        This function maps predefined icon names to their Unicode emoji characters.
+        Used for formatting inventory reports with visual status indicators.
+        Returns an empty string if the icon name is invalid or not found.
 
-    .PARAMETER ItemName
-        The name of the inventory item (e.g., "WindowsUpdates").
+    .PARAMETER IconName
+        The name of the icon to retrieve. Valid values:
+        - Success: ✅
+        - Failed: 🚫
+        - Disabled: 🚫
+        - NotPresent: ➖
+        - Paused: ⏸️
+        - Error: ❌
 
-    .PARAMETER ItemData
-        The array of data objects for this item.
+    .PARAMETER HTML
+        Switch to return HTML entity codes instead of Unicode characters.
 
-    .PARAMETER InventoryData
-        The full inventory data object containing metadata.
+    .EXAMPLE
+        Get-IconFromName -IconName "Success"
+        Returns: ✅
 
-    .OUTPUTS
-        String containing the HTML formatted section.
+    .EXAMPLE
+        Get-IconFromName -IconName "InvalidName"
+        Returns: "" (empty string)
     #>
     [CmdletBinding()]
     [OutputType([string])]
-    param(
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$ItemName,
+    param (
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
+        [string]$IconName,
 
-        [Parameter(Mandatory = $true)]
-        [AllowEmptyCollection()]
-        [array]$ItemData,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNull()]
-        [PSCustomObject]$InventoryData
+        [switch]$HTML
     )
 
-    try {
-        # Skip if data is empty
-        if ($ItemData.Count -eq 0) {
-            Write-Log "Skipping $ItemName - no data"
-            return ""
-        }
-
-        $html = ""
-
-        # Get Report object
-        $reportProperty = "$($ItemName)Report"
-        if (-not $InventoryData.PSObject.Properties[$reportProperty]) {
-            Write-Log "No Report metadata found for $ItemName"
-            return ""
-        }
-
-        $report = $InventoryData.$reportProperty
-        $lastChangedProp = "$($ItemName)LastChanged"
-
-        # Get title (use Title from Report, fallback to ItemName)
-        $title = if ($report.PSObject.Properties['Title']) {
-            $report.Title
-        } else {
-            $ItemName
-        }
-
-        $html += "        <h2>$title</h2>`n"
-
-        # Add description or last changed date
-        if ($report.PSObject.Properties['Description']) {
-            $html += "        <p>$($report.Description)</p>`n"
-        } elseif ($InventoryData.PSObject.Properties[$lastChangedProp]) {
-            $html += "        <p><em>Data collected: $($InventoryData.$lastChangedProp)</em></p>`n"
-        }
-
-        # Add highlights if specified
-        if ($report.PSObject.Properties['Highlight']) {
-            $highlights = $report.Highlight
-            $highlightParts = @("Total: $($ItemData.Count)")
-
-            # Process each highlight
-            foreach ($property in $highlights.PSObject.Properties) {
-                $fieldName = $property.Name
-                $fieldValue = $property.Value
-
-                # Count matching items
-                $count = @($ItemData | Where-Object { $_.$fieldName -eq $fieldValue }).Count
-                $highlightParts += "$($fieldValue): $count"
-            }
-
-            $html += "        <div class=`"stats`">$($highlightParts -join ' | ')</div>`n"
-        }
-
-        # Determine if searchable (default true if not specified)
-        $searchable = $true
-        if ($report.PSObject.Properties['Searchable']) {
-            $searchable = $report.Searchable
-        }
-
-        # Add search box if searchable
-        $tableId = "$($ItemName)Table"
-        $searchId = "$($ItemName)Search"
-
-        if ($searchable) {
-            $html += @"
-        <div class="search-container">
-            <input type="text" class="search-box" id="$searchId" placeholder="Search..." onkeyup="filterTable('$tableId', '$searchId')">
-        </div>
-
-"@
-        }
-
-        # Get Fields (required)
-        if (-not $report.PSObject.Properties['Fields']) {
-            Write-Log "No Report.Fields found for $ItemName"
-            return ""
-        }
-
-        $reportFields = $report.Fields
-
-        # Build table header
-        $headers = @()
-        $fieldKeys = @()
-        $columnIndex = 0
-        foreach ($property in $reportFields.PSObject.Properties) {
-            $fieldKeys += $property.Name
-            $headers += @"
-                    <th onclick="sortTable('$tableId', $columnIndex)">$($property.Value)</th>
-"@
-            $columnIndex++
-        }
-
-        $html += @"
-        <table class="data-table" id="$tableId">
-            <thead>
-                <tr>
-$($headers -join "`n")
-                </tr>
-            </thead>
-            <tbody>
-
-"@
-
-        # Sort data if specified
-        $sortedData = $ItemData
-        if ($report.PSObject.Properties['SortBy'] -and $report.PSObject.Properties['SortOrder']) {
-            $sortBy = @($report.SortBy)
-            $sortOrder = @($report.SortOrder)
-
-            # Build sort parameters
-            $sortParams = @{}
-            $sortParams['Property'] = $sortBy
-
-            # Check if any sort order is Descending
-            if ($sortOrder -contains "Descending") {
-                $sortParams['Descending'] = $true
-            }
-
-            $sortedData = $ItemData | Sort-Object @sortParams
-        }
-
-        # Check if Format is defined
-        $formatRules = $null
-        if ($report.PSObject.Properties['Format']) {
-            $formatRules = $report.Format
-        }
-
-        # Build table rows
-        foreach ($item in $sortedData) {
-            $html += "                <tr>`n"
-
-            foreach ($fieldKey in $fieldKeys) {
-                $value = if ($item.PSObject.Properties[$fieldKey]) {
-                    $item.$fieldKey
-                } else {
-                    "N/A"
-                }
-
-                # Handle empty values
-                if ([string]::IsNullOrWhiteSpace($value)) {
-                    $value = "N/A"
-                }
-
-                # Build cell with optional formatting
-                $cellStyle = ""
-                $cellValue = $value
-
-                # Apply formatting if available for this field
-                if ($formatRules -and $formatRules.PSObject.Properties[$fieldKey]) {
-                    $fieldFormatRules = $formatRules.$fieldKey
-                    # Check if value matches any format rule
-                    if ($fieldFormatRules.PSObject.Properties[$value]) {
-                        $formatRule = $fieldFormatRules.$value
-
-                        # Try to get icon using the value name directly
-                        $icon = Get-IconFromName -IconName $value -HTML
-                        if ($icon) {
-                            $cellValue = "$icon $value"
-                        }
-
-                        # Add background color if specified
-                        $color = if ($formatRule.PSObject.Properties['color']) { $formatRule.color } else { "" }
-                        if ($color) {
-                            # Support both CSS color names and hex codes
-                            if ($color -match '^#') {
-                                # Hex code - use directly
-                                $cellStyle = " style=`"background-color: $color; padding: 8px 12px; font-weight: 500;`""
-                            } else {
-                                # CSS color name - use directly
-                                $cellStyle = " style=`"background-color: $color; padding: 8px 12px; font-weight: 500;`""
-                            }
-                        }
-                    }
-                }
-
-                $html += "                    <td$cellStyle>$cellValue</td>`n"
-            }
-
-            $html += "                </tr>`n"
-        }
-
-        $html += @"
-            </tbody>
-        </table>
-
-"@
-
-        return $html
-
-    } catch {
-        Write-Log "Error generating HTML table for $($ItemName): $($_.Exception.Message)" -Level ERROR
-        Write-Log "Error details: $($_ | Get-ExceptionDetails -AsText)"
+    # Return empty string for null/whitespace input
+    if ([string]::IsNullOrWhiteSpace($IconName)) {
         return ""
     }
-}
 
+    # Select appropriate icon map based on output format
+    if ($HTML.IsPresent) {
+        $iconMap = $Script:IconMapHTML
+    } else {
+        $iconMap = $Script:IconMapUnicode
+    }
+
+    # Return icon if found, otherwise empty string
+    if ($iconMap.ContainsKey($IconName)) {
+        return $iconMap[$IconName]
+    }
+
+    return ""
+}
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBkIg/qYeSJbN7e
-# B3KnIlX5cXlrvTBPNyrzVJvWXYzOz6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCClxxR0YCldxHQV
+# zSprK+Tfl/jdMQDzRxzRVrwX+Aknp6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -413,31 +266,31 @@ $($headers -join "`n")
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCC9nVfU9t98+JTAkIVyPI626JqhYWAzEBUsq006uBnV
-# FzANBgkqhkiG9w0BAQEFAASCAYC0svbGFGd5QApV/Ft4E7F90z9BRNw01fCQ0B1L
-# j6cO5FVAbYo5t6HnK3MvkJhpV+FvjoH4/3mv8WtLo6uVPFL6WUqAh+2RhcrwMRZz
-# w+4ocYKb81Qqeepy0WeSrUX/LrQugrh6vpvS8jx0QWv/8RQXtY7qJ9f6idTU2wrP
-# XIOO4WDq73SJr2R9ACa6a87F4wokQfC7p910N05v086jLfbI+QhZzgGB5IBlyOtK
-# UCP2ZkWQEQhjM3JCUOvKKOz3vx/gOqHM8GWNqkEtQWzdy3WbRWt4xXKrs0lbJEPL
-# 8NjydJBe4dDlt4T2z5RosoNa537TUVKCqi4fmEdO99sII2RK11Bcz24hlIoviwnL
-# XBWvXgvObQaOaOqxFNGAtN3JcIqWij9tOrY2re2LMvWj1WCR+cNhbrFEvXm/fumH
-# jsnwugW4zbNpoWP0RkLfMCWb6vzZG5/woDt2bXYWU7ZmBbZ+b3RkXem9i1PBg5do
-# lmQmGVXCtMzyhnYvdOqwOzoSAJKhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCAXI5mur/R/4zC3XiodB6tL2ZY1ZCEYrKwytPF+SJDX
+# ozANBgkqhkiG9w0BAQEFAASCAYAWn4cjRVijyuUmiNTe/u/EyGWp3vRi6NkPLAkA
+# 4T5aCMTACw78NSVA5oMjSW2uQhbvF3qEbMe4267M3ktYLQij5SV3U0DPylYqOXIK
+# 9RjWJEhe/lac3B2kFu7hMjANXzmfGLG5CT/zAzPZj/z27hnGClCzMHPSGoLqAy9c
+# rLlFQs9FuCbrgljYCpe3UJ8UdQkkz68MkITsyPpQj5IMS9B/GJ8vYvCWssygnoTS
+# AysyHObqUppl2YxC6FtldWIHi7ryZnirTo6s7b7bE5MWDkBjQrfzlRkwhi0SnGo4
+# SKKuUgDfcN/Dc5zUnb51N1jP2wyoGSPGnq5bRB482cOfar1mJuw0v07+1WLWXxvm
+# 9zYY1y9uBDpTUCBSy9R1gE1va5Ofzpcnwlb4LjRaJiP9myD+vVWn3lf9qNMCY4cM
+# Q8ycvJ5JlSgaoaI3hYPtyKhQ/sbPwGXJbBCYElj+8F1tJDrOM3uikngh6WI0Pi76
+# cjtvgeNe5be8Ztluz8YJ1O0b4SShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAxOTUzMzRaMD8GCSqGSIb3
-# DQEJBDEyBDChEp1vP7dew+V/eRoEbgLA9iIsXK0wzNAMEyJc3m5l7iX4ziTjiIKc
-# EuxgxDJv32owDQYJKoZIhvcNAQEBBQAEggIAiTKRRdFb7tj/jF2tlNM/btatNSVq
-# Ht+IaMKPKjRF4neIjv2wwvVOaBxmJroOjYROgVclV/rNG1gjalH6tczsrUBW2rjJ
-# 8tyqQO+WgiWm3VeOrHP/TNXYY71Hue9IUSLttBuzj0VnWAvMXJGWKOX1PLX4KowY
-# Mkrzrzz0m0eM3M5Xd/sDOUJMEfGD5QfCfjkyONcy5beWbHMtEr3lFkDL93+8dBvQ
-# +EU9PP5eCioOIC1M8V6twMLYkggHYFoiddZ6qSuglV0/beEKcZPgLZwFD9fCGtwE
-# tvutmvQsNYBk2xp1MTyhlrNSECyqbtoHmCpHWoovN/H8alcTUP5uOqEFVNIz5V+k
-# JflKz243bZMZgMtpbpw06sgtRrPJJQ4PHe9PaSQltHZMSlmvIjsQZoyNIY9A3qCT
-# liWAEcwcz5q7UW4yg9dq043/JDzqpe9kd5+lOXZBBijKDlAQ5Kzx+8I53H65fpNW
-# DwUqCDe+QhtVeH5bP43saguFbJ9vsAR8xStYB69Bpi6Wt9gmIkBxjahM2gHpERBT
-# 5sxEWLoxVefRWOHNVPGw1I6stVtH9RQ1ymhxN/fFtSdBoXCpunAGl7zPFLNKtinT
-# hFLcSURfXNiBrvw7JozrVLiHKbDdMTFQviJvRZZzf/P9g5hZFCkHHmesrVkQ35HM
-# +94Zxi2eHHp1K94=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAyMjEwMjhaMD8GCSqGSIb3
+# DQEJBDEyBDAXBOqRB/O17F6fUHtn/bqFfWRolmK6uNGVur0WF1HVhq3oc9F8nfyQ
+# L2kl6/yXHJ4wDQYJKoZIhvcNAQEBBQAEggIAv0TL7hI2IyjYOPmek8ltiF3c19YU
+# AvEVaia2uUmQT1DsIX7GvKGgJYzRmqdFZiXgzEjgu4oz/t1Va23JwVffAnG5HU9I
+# wCMyoLuGVzFX3AAylwKoKv2jrW/6B9Leg7Vdsgs06dnOYiZa4ZKjgBbfV7y3zQ4E
+# YxeXCD0hEyvEGs9cClH5VeLudBRYa2Q+WwB2JDP2kPwKf6KNT+kMOSZOByl1NKvB
+# 2WeTpVIjeOvY5iFf2s4Z9f3gqx33/UCra4BL1N7dvsLrUDV2Q0Be1HIFWckae8nA
+# RiNYbhXtxIQe44AB4d1NbQs1AWHP8X1NkMWj5zaYFRyKX3uZSSMvVRsNIAI+3739
+# g5IwEE40QOn+Ux8N6Wfwwo1HlavX+l3q//OG16QW+u5UJCEQgKs/S0PJUPOEPJG1
+# P2YIf0K7gE4PAOzBea9n+n2uYoulNGfNjhkxjOOqlPnPbY42bwXVhgjOSHKPhe/s
+# IByt5kPY9DFJch3EUsvFhc1QAqmi/ls2edLrxkM+iiID4LgZM0y9nHTYJprhiSwc
+# /MW6OxMs5o+khNixPAGKhEeN47ezocHN3HWFNNqHN/0iCGfdq37KrHNnm/+n+egF
+# 8KUmkcxeGz3/ArSVNAXO9Ybo+ODTdGgQg6Qx+YiSw0nV1OBPJ2dfTs5suVicuZUS
+# Rm+I6YAEOtkVu9M=
 # SIG # End signature block

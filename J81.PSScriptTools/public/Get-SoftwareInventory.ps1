@@ -1,49 +1,98 @@
 function Get-SoftwareInventory {
+    <#
+    .SYNOPSIS
+    Collects installed software information for system inventory reporting.
+
+    .DESCRIPTION
+    Retrieves detailed information about all installed software packages on the local system
+    and integrates the data into the system inventory reporting framework. The function
+    collects software details including name, version, manufacturer, and installation date.
+
+    .OUTPUTS
+    [PSCustomObject]
+    Returns software inventory data integrated into the system inventory framework
+
+    .PARAMETER InventoryFilePath
+    Full path to the system inventory JSON file where the software data will be stored.
+
+    .EXAMPLE
+    PS C:\> Get-SoftwareInventory
+    Collects all installed software and saves to the default inventory location
+
+    .EXAMPLE
+    PS C:\> Get-SoftwareInventory -InventoryFilePath "C:\Custom\Path\Inventory.json"
+    Saves software inventory to a custom location
+
+    .NOTES
+    Function  : Get-SoftwareInventory
+    Author    : John Billekens
+    CoAuthor  : GitHub Copilot
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
+    #>
     [CmdletBinding()]
+    [OutputType([PSCustomObject])]
     param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
         [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
     )
-    $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
-    Write-Log "Importing PackageManagement module"
-    Import-Module PackageManagement -Force
-    Write-Log "Module imported successfully"
-    try {
-        # ===== Retrieve Installed Software =====
-        Write-Log "Retrieving installed software packages"
-        $inventoryResults = @(Get-InstalledSoftware | ConvertTo-Hashtable)
 
-        # ===== Save Inventory =====
-        Write-Log "Saving SystemInventory..."
+    begin {
+        Write-Verbose "Starting $($MyInvocation.MyCommand)"
+        $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
+    }
 
-        $inventoryData = @{}
-        # Add or update InstalledSoftware section
-        $Item = "InstalledSoftware"
-        Write-Log "Saving $Item..."
-        $inventoryData[$Item] = $inventoryResults
-        $inventoryData["$($Item)Report"] = @{
-            Order       = 3
-            Title       = "Installed Software"
-            Fields      = [Ordered]@{
-                ProductName     = "Product Name"
-                ProductVersion  = "Version"
-                Manufacturer    = "Manufacturer"
-                InstallDate     = "Install Date"
+    process {
+        try {
+            Write-Log "Importing PackageManagement module"
+            Import-Module PackageManagement -Force -ErrorAction Stop
+            Write-Log "Module imported successfully"
+
+            # Retrieve Installed Software
+            Write-Log "Retrieving installed software packages"
+            $inventoryResults = @(Get-InstalledSoftware | ConvertTo-Hashtable)
+
+            # Save Inventory
+            Write-Log "Saving SystemInventory..."
+
+            $inventoryData = @{}
+            # Add or update InstalledSoftware section
+            $item = "InstalledSoftware"
+            Write-Log "Saving $item..."
+            $inventoryData[$item] = $inventoryResults
+            $inventoryData["$($item)Report"] = @{
+                Order        = 3
+                Title        = "Installed Software"
+                ReportFields = [Ordered]@{
+                    ProductName    = "Product Name"
+                    ProductVersion = "Version"
+                    Manufacturer   = "Manufacturer"
+                    InstallDate    = "Install Date"
+                }
+                SortBy       = @("ProductName")
+                SortOrder    = @("Ascending")
+                Highlight    = @{}
+                Searchable   = $true
             }
-            SortBy      = @("ProductName")
-            SortOrder   = @("Ascending")
-            Highlight   = @{}
-            Searchable  = $true
+            $inventoryData["$($item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+
+            Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $item
+
+            Write-Log "Software inventory collection completed successfully"
+        } catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Log "Inventory file path not found: $($_.Exception.Message)" -Level "ERROR"
+        } catch [System.Management.Automation.CommandNotFoundException] {
+            Write-Log "Required module not available: $($_.Exception.Message)" -Level "ERROR"
+        } catch {
+            Write-Log "Important Error details:"
+            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+            Write-Log "An error occurred during software inventory collection: $($_.Exception.Message)" -Level "ERROR"
         }
-        $inventoryData["$($Item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+    }
 
-        Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
-
-        Write-Log "System information collection completed successfully"
-    } catch {
-        Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
-        Write-Log "Important Error details:"
-        Write-Log "$($_ | Get-ExceptionDetails -AsText)"
-    } finally {
+    end {
+        Write-Verbose "Completed $($MyInvocation.MyCommand)"
         $Script:LogFile = $null
     }
 }
@@ -51,8 +100,8 @@ function Get-SoftwareInventory {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCARe5yCMjus+Yua
-# n0BiOZxFnaRbIPyIW7QFbsVz61XqM6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBW4fZbdgwppP3U
+# 0UW/jOGU0Q20BuIbH8PjFztnRVU4h6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -228,31 +277,31 @@ function Get-SoftwareInventory {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCB+FbElr+VU1d4ucfuiYK6PfttVqJps/86V7zHyF7gm
-# fTANBgkqhkiG9w0BAQEFAASCAYAUmgsvK9sUUz7yrl2fScylt57c3kYKPTHZgvR0
-# OfJIeB4cGMHv1Xi7IHgbViDLdDuHA+doIEr0V8dq54SYpseH3eXGETxq+YljjNrE
-# uB6uXwT4vwAMS6XteJSCCLEUTkq5pJcHk/GHTYDToG3118tzqGIg3Tz/gNhZ2gTd
-# ReDSQ0WR6UPgCfz3ZQ78ZkyVVw4rsRV2/7wpM3pZhLO2DTZnr+2prtQuVVeM6MIK
-# ZQcm3vkm9zNzcgri/Gji3x8gOHHlNtYFuRp/xzuvuQjHh68aaSo+AfJ6uv6hKDpm
-# MVmLHdvzFc6hObft5ya5HBuIujYuJbnLcJq/yUVyjfTEFpBh0r028Au/66/IFTP4
-# MQgIXlsxA3YbA9WV/AYItaNVcrt37+XN1ZQY910wsL95IhtYXwv8KpuJUAgmbSCo
-# TMDMcccimvRJ5Gge/9LNpYYq9bMkF530YSB5/lUQklrz2naRPr3Hq5lObHKr5tqM
-# ZXWELOVrxE12dz3bGxVMrUpGqHGhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCBT38lkuu/Nf3X1FmWwyghYMVfw0H0ZDY6oQvZxudCO
+# YjANBgkqhkiG9w0BAQEFAASCAYCPm2YYnMGaKT1hSdpUpcuMX9xiOhmxOmCMcWie
+# DgocfjXd4W1BkbyKqIoDQtvCYUEX+szTcp6hwbz7b5SNz+tCK5LJc8fnq2C9ziWO
+# exV906TT6fC3Bs28VxVOhLJgM2XghR8Y/GhM4JOJAYzU8qLcQ5/Qxc2mAGY9dk0+
+# kksOTeAFp3zxUlUho2Ld0wrOgsf2aFCEgZtKHtfuVUSUTUnn1ouSiFNgXNuXDNRW
+# PnJtvdtuMELDJxjxTxpTdtRKUr3r3GDl87fkByvJA/I1kFNf0/ELRn3ZLNw8BMlN
+# AzEqGUL8sRFUmSEZxxATOidNi2ojcTAbJ/riJQGAfM5LondyMJLqAHCUTfzYb4po
+# gvYnJKfUJmhPDL6xFDQ/pww6398HZ8U8vDocsD4LSMOapq+lFok8+A0K1fSlYfD3
+# MJ0c3aqy8ul+hGzDvGPQNnCsFeefmfjktzdcgnBdLdxnizGhF8qe1wXjVqZ2qkox
+# gJqdgERqOA8eau9JxlGvWY4HMsuhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjE1MTFaMD8GCSqGSIb3
-# DQEJBDEyBDA037Uc5B/n8RecHr8Pyoz9sRMsVynf1JAdwaf9DdIbcq5Gcpf2OrNS
-# qgte/wpIodkwDQYJKoZIhvcNAQEBBQAEggIAuw7b2Z/Y0ZPpRc7XYPPM9ZIt+WRQ
-# S044ptJvuvnQh2QnFBVB6FKWeJGL5nSfBEqbmRb+mxj3ftBXlwl+t89oxvnY+U1+
-# xt36WELarbUKYCUPOuLDj5DqIPshsEPZK3+PLdhuh+h02OrZ3yKlpVh03d2UBNDa
-# w1Crylt/BDhpJx03OEKpKCre8axJ5A60Oniz8xEFQVN5jUZJQPNh301HoGZSTA1U
-# nKQcAvuOGU8FfO86gSuFl+UggtU950Hl8yfocASONStOiQQ3Dlvz45DgtKM8yxaC
-# tjLXXbfGLyM5PGB9PF8NpvdYB+k1NmH8Hd4NNswwz8bhDoSvqo9fxTSAiR20JXbH
-# kNzDbEeOUfPAXkfUYHA0hEGQdmDLgFAlfWv0wr/QbB1TSiX9bX1MRsjB5JPWvD8d
-# 3cZjNofHeRNlQ6X/8yjhzSxaG4/k1ZmNyMdqjgBEevS5JDHDKYH952HrgO59GlaO
-# HfOH/yJz17/ZMUsm73TGajZPyySWcJys5enOOyXAd071ge3h4G6YqO7zlgxyz+1P
-# 3y5EOjU7QMEm+idfXZT9zn3+SsEYjXwbIsP7V2pfPoTtSiX0zuDjSsN/ahAVmDmo
-# 5eujwAzoKrF7mrJJ1UPVW6DH8MrxeOZOQW4TZoDzkIpjOvvbEPoEMnk//5iybw1R
-# quObZkdVkmtn1hU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAyMTAzMzZaMD8GCSqGSIb3
+# DQEJBDEyBDAAPRrEL+34rhIk0IGZXtuZ5zSUNklKmRIfdBzuJqIWNDBhmnuBTZm0
+# CiE0gB/Fkl8wDQYJKoZIhvcNAQEBBQAEggIABpZXEuycVdbCqfAMXCjGuYMd2XEO
+# Di+2lon26S5oaaIIXYVTQEPNER2Xhls4TwJKlw/MklkHdsOMWR46+TtoNcb52h2S
+# F3quXtTkz2kpLVVVBe049y53rWOpzMzPEVttUj1SY4HH2Vx+RTO66nJY2ydaDWTt
+# FlJ/TMwvf77pLctYYSK+mnQnLWdrxaB4x0e09hfw5GNDhcHciEfk9VXD6xfJstxS
+# +rhF6TsoUTtHcNhWiB93cuGR+4GRUXcajlBZcaI5+IDdUopdRZTjgjF8+izZbCgV
+# Cz1gEC9fc8y0p1iBKctP+vcgnoi5UufdrZF06pV0UMt0gjRoBhhUVW3ZGw9BT8ZJ
+# 00PybQJmV8JBz2MrRqPKYv5VdDzeOAZgaZ1mEA9grn5V8a0+inVdbomlUsE3K+qa
+# pVdoa7wlXnhK/HmSN9b3JnqPb+SIp4/EeSLLHQcaJnK9bD7nP+nCnlaXHUsa+yi9
+# q+cCtSWMsM/IoI8WFnWmwGRAlcvfT5qvYjRuEE3YH6rqeNV2M5+/pj4cLsqbiJsP
+# tAfHjQ8dOv23IJDa1mrso2xR/xKUX6wAXc6P2dc/dVrSHzGxthqZYohJga+gqdeN
+# bkrlHLHeinO50OIwYaBNNgn7X9PPW+w0X/JcG16+s22AlFsmyaDXtYknoGZKcxj+
+# 3aARVNJgUOaAghg=
 # SIG # End signature block

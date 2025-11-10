@@ -1,6 +1,6 @@
 <#
     .SYNOPSIS
-        Retrieves NVIDIA vGPU software release information (optimized version).
+        Retrieves NVIDIA vGPU software release information with filtering options.
 
     .DESCRIPTION
         Fetches and parses the NVIDIA vGPU documentation page once, extracts all release
@@ -127,62 +127,11 @@ if ($MyInvocation.InvocationName -ne '.') {
     Get-NvidiaVGpuReleases @PSBoundParameters
 }
 
-<#
-.NOTES
-    Author: Generated for Golden Master Image Documentation
-    Version: 2.0 (Optimized)
-    Last Updated: 2025-11-08
-
-    Performance Improvements:
-    - Single web request instead of multiple
-    - Results cached for 60 minutes
-    - All parsing done once upfront
-    - Filtering done in-memory with PowerShell
-
-    Usage Examples:
-
-    # Get summary of all releases (fast - uses summary data)
-    Get-NvidiaVGpuReleases
-
-    # Get only active releases
-    Get-NvidiaVGpuReleases -Category Active
-
-    # Get all detailed versions for vGPU 19
-    Get-NvidiaVGpuReleases -MajorVersion 19 -Detailed
-
-    # Get latest detailed version for each active branch
-    Get-NvidiaVGpuReleases -Category Active -Detailed -Latest
-
-    # Get all R580 releases with full details
-    Get-NvidiaVGpuReleases -DriverBranch R580 -Detailed
-
-    # Combine filters: Active LTS releases with details
-    Get-NvidiaVGpuReleases -Category Active -Detailed |
-        Where-Object { $_.BranchType -match 'Long-Term Support' }
-
-    # Export to CSV
-    Get-NvidiaVGpuReleases -Category Active |
-        Export-Csv "Active-vGPU-Summary.csv" -NoTypeInformation
-
-    # Compare all versions of vGPU 19
-    Get-NvidiaVGpuReleases -MajorVersion 19 -Detailed |
-        Format-Table Version, LinuxDriver, WindowsDriver, ReleaseDate -AutoSize
-
-    # Get cache info
-    Write-Host "Cache age: $((Get-Date) - $script:NVCacheTimestamp)"
-    Write-Host "Cached summary count: $($script:CachedVGpuData.Summary.Count)"
-    Write-Host "Cached detailed count: $($script:CachedVGpuData.Detailed.Count)"
-
-    # Clear cache to force fresh fetch
-    $script:NVCachedVGpuData = $null
-#>
-
-
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC4/i2qSbyPj/sj
-# 0qCv9kD0RDwOkCz8zKt2Asf0SvHRM6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCbw0Io+DW/2Les
+# +MYw0gxNhPa55t1dBhbIvwxz/x5WyaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -358,31 +307,31 @@ if ($MyInvocation.InvocationName -ne '.') {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCC6IA1PGc4XH57pdQmLDj+wnVXUpSa8dDpBnFz+aPbs
-# RTANBgkqhkiG9w0BAQEFAASCAYAIh03DzL3tPdpEa3f6q4kJbONlq4rA7jx/eYLr
-# /8Mfh03VmDQ7hZ8Qr8lUZgALagNqge1ymGhQ2uSxFL8P6aFZTQkNzvw+5TvVP+Su
-# E2Ngyepih3DRu0ozZPhvADtC+qzGnhdDQykpkwgn6GJnPcSsFAo8448zfkJGxfTa
-# C0AutIBynJGmRof47iZVW2D4KEi/E4PPqNWkIxGvGNjDL3AXMuoX009tsucKcof2
-# TuQFexS4btqIBd6VN7kiLMiJd3UefiqrJ4zNahDpH4wWoLWqFXREQRAIo1bKXHAp
-# IH2YobC4a4dTn9q+DW0C9eQpRx60cV76uDxdKDpUr8ZbI/tGGhHo26/lMMZZ5bbD
-# iGbhgRb8Tq+kkrYLFLIe4scEbTm09MTDEUy63he9+4C7Nqw+X5itPPCdv+TOBG8A
-# K3sdMw1vrNNIpu7FMKJuVdt7md77OOJl4eM98BAHdGKHaZ7HlnZI6cTmkrfeVJDj
-# f15VE2vlTuRsSLtO4H8WTGpjTG2hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCC4fc7plRcZy03rOAKrZrgEAMVYicLYoOkDLiHXt8ZP
+# WTANBgkqhkiG9w0BAQEFAASCAYDIz4qqHaQnuEsTPifQ2IYYhvpA9vxV6UKQjNlO
+# +2iv86laE1pacRGWrRAFvSOyYcIDD5rkemnh/Uge+UV/3dw3qqFP+uOLDsJOw4eg
+# M5JqvbvZnQMoRoRZfLwEKDJybhgcRNqeIfAoI/WVI0Hahoa6v79YHhf5gEkMtEYP
+# rpAeUBi3aT4ewVpPFoN6E9vZyNJHPYODDk3vWZjAyeON9Eh6AtXo6qmpduT1L7wB
+# RygmIojcG0U31Ner6YS4WGyKcMEGVYg59usbwzCwv2H6EuM26uTvtJTS3Rt4PfaQ
+# gxeuAg3kVNmIzhumPLFqEbFrJsuZSvrMurqZN8nupFgkWjAy0nEwFiOlEZykp6tF
+# zTA+0G5uW1NMVNTaqRweSEFvLSpUqmRocOxwbddlDg8pYbYf4LY6upllswmeR/XC
+# ke37hFnwV7Sr481SmilA8savx+uzl9PIkC4STKgNxsGACrnlRrWe6au8yn0ke5l1
+# /VP2qeiUvq9xJco/87w6ZG0TktKhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjE1MDVaMD8GCSqGSIb3
-# DQEJBDEyBDCyMDNXkuiGKX34feeTxmpVqr0leMswOo+TxB4OUioENM/aNLYPq2fn
-# u2Tn4dOv9LMwDQYJKoZIhvcNAQEBBQAEggIAFybaywhZWGXBedcpc8gyDwfMjxsg
-# Usv/yzmDeZGfVuY/6EXltCbyr4sG4CLpRYR7scdddD70v+Y0OtrTpYpbKNx5Z7j5
-# xxzrEtM9QiCqeP5aY2dgb+nRnBsnlbiIbCOG3zxCVCJCChoufz9zZSWTYhrrkzoz
-# Ut9YUu3PQX73+GLZTN6men7y5845yPLlLRBmlneUZZEX4wf4Hg5eUYx0DJOPOPUL
-# s19WRZtjOLxhvK1FFn1LGY2eyi7+Q0CcCs+FmLYra/fTfOeJn+iDWU2DQKDIKTj5
-# nEIPfhrhskrIOfz/vcWRljBT6rsoBtSOgGFiKKihVSgtVZas7v4a1E/jYjB01RLO
-# 5HsYWhrJIKY75UeFlDSId+sbhcAG4zG9AbhaRvgADcCzh/dWVsu036fZMy+cQ4Xr
-# E51z5lHmtcprt9x/Z8IKRmoZkB98t/1d5eG3gnS57AZcAvyqOrL/BSuve3mjFyEo
-# vnuB36MZH7JGfgbHhAIcriCVT3KyxnpRKiRzlMIKoJWXmGTwTDDLoEPTZryziRFJ
-# i38MWjSm6mZ0UYW53nWg27Aj/wM180+2orOKog4LnEhFz4rPiUeJQ5qiPE0/Z68K
-# /t0E7nO79mqc3juR+9oCN3E/Pp6ceIUa8WS1ZAVxYaAG9vwvxcbRzbsiHAZwJ8xN
-# +5C4sKUpJMB8DvU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAyMTAzMzBaMD8GCSqGSIb3
+# DQEJBDEyBDB4lad33K/lALUzd60dbUfDIwchwWOb3wvSo3Gox5km9iX4+FxqRU/h
+# d1cGka712HswDQYJKoZIhvcNAQEBBQAEggIAF7j2EacfOcHgiGTkegI1GjyQseIW
+# SNbzH/oDP++5LIH42EDw6VGtMQlCUMi6Q2OJj9uN+nJclJqCOTsS5/+rB9jv02H7
+# XZFgCjite2G8ayJ+A3C9MXhLrT+FFbWFNh2q1uMBRZkmKdsrS6FG6HpNKyu+l6Yv
+# 0XdL7wPmZGT5gDdYpjQ/XnCfhvTiL59JWAU5QwQuJyF91RavNmsiuxKn2nrsxi3F
+# BN7IMox+k8hNpTEmUyWg691R62lhANBzhYSKShAg9AjfjtnG+bk2bz1zV/ZEtX2N
+# E0JKxv33+K8xUdXkh5AVQMpBgDdtZG99E47czeaUauTAefGA7h0JoP8QLIuG7SMy
+# JL5Jc/tFCcThXlXDA3tvgScUtb8KfKeS+70KG6ncQoVclgtq9zWW41GteHNrrPvN
+# wVIJSbontRa1HpuFcccfO9elZAkF0RzqvRJUAZSCaoACiKv13dcJtL+MoKwhhd+g
+# /NYTQF6BCjdVcNV+9OWaR6XVqVjb/N0IrHDfpkuQog4/V/UOWX22GeZzH/9qGwT5
+# XQDBSO1gi79ZLlmp0VnBZIqCH6p1NTorvIJKuEhlkda/sEcwChW/4m347KyEtf3c
+# 6tfpGIxfgKLh5VzpQU4g8/nEd01Q0KCXpTnJ82bsivdPGY0CWSSRzcswGTeEEw0t
+# ITYzZbyYmeXk3MU=
 # SIG # End signature block

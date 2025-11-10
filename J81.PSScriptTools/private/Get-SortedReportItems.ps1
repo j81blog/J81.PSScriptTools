@@ -26,7 +26,7 @@ function Get-SortedReportItems {
         $availableItems = @($InventoryData.AvailableItems)
 
         if ($availableItems.Count -eq 0) {
-            Write-Verbose "No items found in AvailableItems array"
+            Write-Log -Message "No items found in AvailableItems array"
             return @()
         }
 
@@ -34,11 +34,12 @@ function Get-SortedReportItems {
         $itemsWithOrder = foreach ($item in $availableItems) {
             $reportProperty = "$($item)Report"
             $order = if ($InventoryData.PSObject.Properties[$reportProperty] -and
-                         $InventoryData.$reportProperty.PSObject.Properties['Order']) {
+                $InventoryData.$reportProperty.PSObject.Properties['Order']) {
                 $InventoryData.$reportProperty.Order
             } else {
                 999  # Default high number for items without order
             }
+            Write-Log -Message "Item: $item, Order: $order"
 
             [PSCustomObject]@{
                 Name  = $item
@@ -48,12 +49,11 @@ function Get-SortedReportItems {
 
         # Sort by Order and return just the names
         $sorted = $itemsWithOrder | Sort-Object Order | Select-Object -ExpandProperty Name
-
-        Write-Verbose "Sorted $($sorted.Count) items by Report.Order"
+        Write-Log -Message "Sorted $($sorted.Count) items by Report.Order"
         return @($sorted)
 
     } catch {
-        Write-Verbose "Error sorting items: $($_.Exception.Message)"
+        Write-Log -Message "Error sorting items: $($_.Exception.Message)"
         return @()
     }
 }
@@ -62,8 +62,8 @@ function Get-SortedReportItems {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCWB7Wk1vYjjYET
-# Hk3dz+I5hNiaMa874wlyS6DPLsiOL6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCqnUGvYJm0NQgw
+# mOMnQDr/dZneXEZ/be1Hv4X6zsIHwqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -239,31 +239,31 @@ function Get-SortedReportItems {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCBIvGAD0KdpyEsWX2DVlQ2nDyirYigB6aTBc4C/63jY
-# JDANBgkqhkiG9w0BAQEFAASCAYDAdeWOaNqrlPccbwyWD9BJxMVkgBcFB07e6Dam
-# RyNiqPJiOyrXZdtT58iTaEQaSzptYn9qhSTYzTxQdVf6GQU8ZY7uwiBrqt4lQD8i
-# eu1RwVw8PVjRxyRevGrzXLbseT997PNVNQmql77ZFxUrdVZJO6PD70fcvxLCcxyr
-# NFA/4pIDhSO5MFXq6PRiVY1XBeLe0IFFGN7JMWelWpDcDGsEBj8ZaiBAb6Dor/G8
-# oMcnMqd4TjXbCVAovLz8F7C1B9vvnTgk32JXCkVmR1wr2oKEyk7bvXvrFCGYHBdY
-# 4VMpwgaF+alEVL7vKiIbHZdKHx6NYsNJZcA+5dUi3pZqAjfSnhAD93GK1855R8du
-# 2yG4BTkM+lFw8zkSKmPSmYPlV87ibPhdTLUDXOZRolGEPFqBM8Km2QQKoaCUdEY3
-# Kh67FLmq9fc413lJ43tT7bUXgMiKFkaiw8ECQ5ppm6Sp9censgviOT8a1cPsAcwU
-# krSk5hjp8B9name1JIODuJhlCwOhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCKltnocrHdstj4tBkeqsdxv8HoOysC4C5FVro3JFqo
+# oDANBgkqhkiG9w0BAQEFAASCAYCXbsYYJ/FiGMp/x6BO8CMAAbi6IIDa3prRADJ+
+# nUhAQQ6rB9wlE1ZKl4igJ1q8FrE1bdFBXChn5nB56LK4Jy+upQY65AaizoNDhvRZ
+# FVwAjqzeJvBeLw8FMiTkiiRYRDZiXqJEfDkMHr3AZqELJ+c0bYj0VbExpOnODX+2
+# cRHsk6EBCvIgml+gXcKxohuBd7eF8uY36QLS7W5qF2vv3BOaDWL+wlQMKvkLHYIP
+# cwZqZxG05hDfMU2Du8UC1mEtHxMvlQ+Q93CGDztq1EKWEOYU8ZsQgoZynu6wwPo+
+# AR6IAdjcjo4cXvynUS/eVmkfLFveaOaCprQdT4J3rFkpk7X5W1RpXjdbx1F+UfIR
+# 7MDWOP2acQ9RMhw+bQdmuli9+6i1BAcZldxZ8cVsiXrk5ouGXc+ameJqDi8Vpb/B
+# RwkDx1oDeSoP9CY7kwVnbOWt9aXbdUqBANknFaGBx+ss1R/U5FXrs99/Ef6qDDBH
+# ZKZGGtjsiuKI2PD60wtXrPYmuHChggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjE0MzhaMD8GCSqGSIb3
-# DQEJBDEyBDB7MOs6A9O9eIl+4jPGjbVEbDH5td2fpC8t4Xa+ZlAoWXzZaI9jXZy9
-# C/H3+tdIqVUwDQYJKoZIhvcNAQEBBQAEggIAR+KicTGC7t98E1R7LTJhSf/6DMLp
-# kUA+sUMPCa9dWAoc3UHydN887z97IQNPr7XWAflkHE1DW7ooy/HcilizY7RxMljd
-# mohwu5qfW6Fxbh5ZBoC3AOUCCwjbWDzqDbItuHsez5+pw4GVXR6bW2RgJuV71isw
-# LgnO6chQdrJQLlXIlGTIPHBe1rECVaE+LNhd6pXn6R9XBRPF9ym7J0WQv+tX35h0
-# n3MYM/YFohdecIAoBaTZykuwLK4xrVAk+FvzUXMR1+4mC91Miuf64syOIXgurj/N
-# rp7eNNVwJu6bkKmGPbm7ab1BpZsczSlF7PksP2ffqsWfjhQoDxFnPA6uITeYUKi8
-# lGbkJYIAE3v8iacz6PzpDxtJMippseQ167mwv0A5rx+zCFCxQtAbuIV0Di8cUjxv
-# atLGrYeqwP96o7fozWlcSQq/AKZXeYG9C54jjPHfbIlvS+TQ+fufaJKuwaKNF4Wi
-# KpxmcVLRQKJkPsAdtjlADnEKvsb9c/qDQD6H6+HOviqEn5+ev2TfrP35OqJJUOql
-# CBPVTU/n74QU/vxtRFHa2bcWqbrIQqYzKgFvYf95QI3FScLzdPd6E9dIcXe0Lgvy
-# yunIflCmv6RkI04NEEw2j/X6B16FZkBEpP+W6o0WwMU+PxNHaxrROKeu8H2GYaAD
-# f3XtY25ZKAZF1w0=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAxNDQzMDVaMD8GCSqGSIb3
+# DQEJBDEyBDAsF45KL+4/GwaztbZd/F7wt165llCzrR1vdgSf0N5QA+kiiSRTHczv
+# QHUf3pcbu+0wDQYJKoZIhvcNAQEBBQAEggIAnFhN/JHs9WFNPHalRv3KmcOE3huA
+# HmpIAc8M14sKIvNBytv6TqO1bQ19yYIXv+rOZSeHNhNlRYLb1rWNCmEZR8aS613r
+# gIOI+eUQiRIzQiCw+xXO0NixhyfP4yIARRufjy6SbStiKPJ9GQbGC61o1N8gPDDZ
+# ra0VR3uljNMujO88yLaE6PWmpoVJb3BMWSuH0opZfEMRVh4yC0PpGryNfkjSPnce
+# l0bERmstmj9agzMyiTT8JVpIwW6XIC5arNNltVlebRGumvPEgdkXfVcnR8YcMLqI
+# 2243tWmg4SgnN4HG/MZwnsgBhybKS59hosTo0pD0q/dgXb7VhzEl1BUzWs3bob11
+# IEwi6SlLzZqvIUEScJEStsSIq1auh99JjXXGVNd2eH/stP1t+YtSEnW2q0vauO1N
+# /JQw4k0hK1UmLaA5Ghlkouzy2IA8arhrWhzK7i7EE+OZE3PK4JE8RsBRjbjqjO+v
+# ww3PrZsiIMA3JvlbvpjRh72t9jeC2lb4mBm91ByLs4JG4r3EgVgjOei7ECJc5T+P
+# gawh4ZeG9tS6PO2qDRdvO3kHFZEvwJ7vg33pZTbTZfXwuynq9sv2jK2UgF8w6jJM
+# utafTSAtLZCQB6LvT92xA5vRUFBfuqTSThxlFnZ3yNl2tUZuDJiaitqn/biOSt8K
+# oy4lXVQoVgKIAfI=
 # SIG # End signature block

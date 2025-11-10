@@ -1,124 +1,138 @@
 function Get-WindowsStoreAppsInventory {
     <#
     .SYNOPSIS
-        Collects Windows Store and MSIX apps inventory and saves it to a JSON file.
+    Retrieves Windows Store apps and MSIX package inventory and saves it to the system inventory file
 
     .DESCRIPTION
-        This function retrieves a complete inventory of Windows Store apps and MSIX packages
-        installed on the system (for all users and provisioned apps) and saves the results
-        to a JSON inventory file. It uses Get-WindowsStoreAppsOverview to gather the data
-        and Save-Inventory to persist it.
-
-        The function is designed for unattended deployments and system inventory scenarios,
-        including running under SYSTEM context.
-
-    .PARAMETER InventoryFilePath
-        The path to the JSON inventory file where results will be saved.
-        Default: "C:\ProgramData\SystemInventory\SystemInventory.json"
-
-    .PARAMETER Scope
-        Specifies the scope of apps to inventory:
-        - 'AllUsers': All apps installed for any user on the system (default)
-        - 'CurrentUser': Apps installed only for the current user
-        - 'Provisioned': Apps provisioned for new user accounts
-
-    .PARAMETER IncludeFrameworks
-        Include framework packages in the inventory. By default, frameworks are excluded.
-
-    .EXAMPLE
-        Get-WindowsStoreAppsInventory
-        Collects all Store apps and MSIX packages (all users + provisioned) and saves to default location.
-
-    .EXAMPLE
-        Get-WindowsStoreAppsInventory -InventoryFilePath "C:\Temp\MyInventory.json"
-        Saves the inventory to a custom file path.
-
-    .EXAMPLE
-        Get-WindowsStoreAppsInventory -Scope CurrentUser -IncludeFrameworks
-        Collects only current user apps including framework packages.
-
-    .EXAMPLE
-        Get-WindowsStoreAppsInventory -Scope Provisioned
-        Collects only provisioned apps (staged for new users).
+    This function collects information about all Windows Store apps and MSIX packages installed
+    on the system, including apps for all users and provisioned apps. The data is formatted and
+    saved to the specified inventory file for use in system reports. The function supports
+    different scopes (AllUsers, CurrentUser, Provisioned) and can optionally include framework
+    packages in the inventory.
 
     .OUTPUTS
-        None. The function saves results to a JSON file and logs to a log file.
+    [System.Void]
+    This function does not return objects but saves inventory data to the specified file
+
+    .PARAMETER InventoryFilePath
+    The path to the system inventory JSON file where the Store apps data will be stored.
+    Default: "C:\ProgramData\SystemInventory\SystemInventory.json"
+
+    .PARAMETER Scope
+    Specifies the scope of apps to inventory. Valid values:
+    - 'AllUsers': All apps installed for any user on the system (default)
+    - 'CurrentUser': Apps installed only for the current user
+    - 'Provisioned': Apps provisioned for new user accounts
+
+    .PARAMETER IncludeFrameworks
+    Include framework packages in the inventory. By default, frameworks are excluded to
+    focus on user-installed applications.
+
+    .EXAMPLE
+    PS C:\> Get-WindowsStoreAppsInventory
+    Collects all Store apps and MSIX packages (all users + provisioned) and saves to default location
+
+    .EXAMPLE
+    PS C:\> Get-WindowsStoreAppsInventory -InventoryFilePath "C:\Custom\Path\Inventory.json"
+    Collects Windows Store apps information and saves it to a custom inventory file location
+
+    .EXAMPLE
+    PS C:\> Get-WindowsStoreAppsInventory -Scope CurrentUser -IncludeFrameworks
+    Collects only current user apps including framework packages
+
+    .EXAMPLE
+    PS C:\> Get-WindowsStoreAppsInventory -Scope Provisioned
+    Collects only provisioned apps (staged for new users)
 
     .NOTES
-        Function Name : Get-WindowsStoreAppsInventory
-        Version       : v1.0.0
-        Author        : John Billekens
-        Requires      : PowerShell 5.1+, Windows 10/11 or Windows Server 2016+
-
-    .LINK
-        Get-WindowsStoreAppsOverview
-        Save-Inventory
+    Function  : Get-WindowsStoreAppsInventory
+    Author    : John Billekens
+    CoAuthor  : GitHub Copilot
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
     #>
     [CmdletBinding()]
+    [OutputType([System.Void])]
     param(
-        [Parameter(Position = 0)]
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
         [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json",
 
-        [Parameter()]
+        [Parameter(Mandatory = $false)]
         [ValidateSet('AllUsers', 'CurrentUser', 'Provisioned')]
         [string]$Scope = 'AllUsers',
 
-        [Parameter()]
+        [Parameter(Mandatory = $false)]
         [switch]$IncludeFrameworks
     )
 
-    $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
+    begin {
+        Write-Verbose "Starting $($MyInvocation.MyCommand)"
+        $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
+    }
 
-    try {
-        # ===== Retrieve Windows Store Apps =====
-        Write-Log "Retrieving Windows Store Apps (Scope: $Scope)"
+    process {
+        try {
+            # ===== Retrieve Windows Store Apps =====
+            Write-Log "Retrieving Windows Store Apps (Scope: $Scope)"
 
-        $overviewParams = @{
-            Scope = $Scope
-        }
-
-        if ($IncludeFrameworks) {
-            $overviewParams['IncludeFrameworks'] = $true
-        }
-
-        $inventoryResults = @(Get-WindowsStoreAppsOverview @overviewParams | ConvertTo-Hashtable)
-
-        Write-Log "Retrieved $($inventoryResults.Count) Store apps"
-
-        # ===== Save Inventory =====
-        Write-Log "Saving SystemInventory..."
-
-        $inventoryData = @{}
-        # Add or update Windows Store Apps section
-        $Item = "WindowsStoreApps"
-        Write-Log "Saving $Item..."
-        $inventoryData[$Item] = $inventoryResults
-        $inventoryData["$($Item)Report"] = [Ordered]@{
-            Order      = 6
-            Title      = "Installed Windows Store Apps and MSIX Packages"
-            Fields     = [Ordered]@{
-                DisplayName  = "Name"
-                Version      = "Version"
-                Publisher    = "Publisher"
-                Architecture = "Architecture"
+            $overviewParams = @{
+                Scope = $Scope
             }
-            SortBy     = @("DisplayName")
-            SortOrder  = @("Ascending")
-            Highlight  = @{}
-            Searchable = $true
+
+            if ($IncludeFrameworks) {
+                $overviewParams['IncludeFrameworks'] = $true
+            }
+
+            $inventoryResults = @(Get-WindowsStoreAppsOverview @overviewParams | ConvertTo-Hashtable)
+
+            Write-Log "Retrieved $($inventoryResults.Count) Store apps"
+
+            # ===== Save Inventory =====
+            Write-Log "Saving SystemInventory..."
+
+            $inventoryData = @{}
+            # Add or update Windows Store Apps section
+            $Item = "WindowsStoreApps"
+            Write-Log "Saving $Item..."
+            $inventoryData[$Item] = $inventoryResults
+            $inventoryData["$($Item)Report"] = [Ordered]@{
+                Order      = 6
+                Title      = "Installed Windows Store Apps and MSIX Packages"
+                Fields     = [Ordered]@{
+                    DisplayName  = "Name"
+                    Version      = "Version"
+                    Publisher    = "Publisher"
+                    Architecture = "Architecture"
+                }
+                SortBy     = @("DisplayName")
+                SortOrder  = @("Ascending")
+                Highlight  = @{}
+                Searchable = $true
+            }
+            $inventoryData["$($Item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+
+            Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
+
+            Write-Log "Windows Store Apps inventory collection completed successfully"
+            Write-Log "Inventory saved to: $InventoryFilePath"
+
+        } catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Error "Item not found: $($_.Exception.Message)"
+            throw
+        } catch {
+            Write-Error "An error occurred during Windows Store apps inventory collection: $($_.Exception.Message)"
+            Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
+            Write-Log "Important Error details:"
+            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+            throw
+        } finally {
+            $Script:LogFile = $null
         }
-        $inventoryData["$($Item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+    }
 
-        Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
-
-        Write-Log "Windows Store Apps inventory collection completed successfully"
-        Write-Log "Inventory saved to: $InventoryFilePath"
-    } catch {
-        Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
-        Write-Log "Important Error details:"
-        Write-Log "$($_ | Get-ExceptionDetails -AsText)"
-    } finally {
-        $Script:LogFile = $null
+    end {
+        Write-Verbose "Completed $($MyInvocation.MyCommand)"
     }
 }
 
@@ -126,8 +140,8 @@ function Get-WindowsStoreAppsInventory {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCR1BGcFrZtzgAE
-# unAssvGB0a+r94RqRCjBLYR5YCqq5qCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCA9dI/TT06xsWUx
+# 98omDA3xS7WkFZGLXkRtyRPlHoNJXaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -303,31 +317,31 @@ function Get-WindowsStoreAppsInventory {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCDzUf8ByzN1B9CHTorKfBLXer+lJws6shMVV4VCs0yY
-# /jANBgkqhkiG9w0BAQEFAASCAYBAzhpcmtyrCbJ2qXnBrYMfSjCIUUuf8KxyLZlV
-# OEK+SlJMCvIPjkqh9QjXeyKBdTE1EsfzprLaOa8lrthsEpj8Jdy1Y4nJYJpW01T4
-# w7UKpbumTtXcR9jMqbnaIEieYoPG0eJ+BgUKvYYKRXrk2cjduQ0fK4JzaYuBvs0K
-# MQEwH+eYHvvu7DQ8H3Px//QRuthMgW2y9rM9TRYOG9B4+Ev29Q6HOSaMj0RoAHar
-# JlzM4YDWTDwLPwxcjIDk7TMfU0i3cww2KzGN6vPmW78LHtl0YZoLYHKzfSjrnRDd
-# tpbrDZnsIY0UjtYK92OH94QDxbM7hX6u4cne2WLtXdKj057vWdUGyBKChe8y0EXp
-# tKJ2bt9iAjWIf7M8XPgY3FZ3IzhQvax25nybu/pWL79LZPMWe2tyXl6PYShOyyiv
-# Zp9e+4wjLz5dAABB3xkijNQhB9o/SBSEyd59sGAgfw+mG0dh0lydfsHu4zarJ0IX
-# Oad6BhEl8rAN0djR/NTiw5A7ZHKhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCD94r+YDfjxxKsUaLAJByER9Ek+yHz6CPN2P1P58BJN
+# QDANBgkqhkiG9w0BAQEFAASCAYBxnPoenx1++OitXWg1BCL3JNTfYdefHxR77+Jx
+# r3RTjBQrbUZOBmSjmIGpOidhiE8i5OlD+p+9+OZu9AzD2C9/ULvg4MHOZxTryy4N
+# lxdXN/6ZMiaDacMcICt+JA6gQHSHoXADj+2kU3j/UcfxaxelORR6VeornkSdbNCX
+# LABQYtGSegpck8/ovedLdVQKiC+WSYSsG2xObaDDC9WBd5WCFQodmApLmu2/LhhY
+# 0CtGpMBqnS8zxUe4A0SvKfc6aJ6+I0OtKrWNLNXbJRMSLrX6I1AkP6anhS00D5xI
+# 4LoL5OvTnm0CmXgm/9JXJViNKBloxs3x/td6Ae1MyVbVX1xyGkotgikudZbKfR/n
+# SUviR7Ztrs/ORD+7fkoikZD/TQtc5dndBe6Qqhwgge6O2PjnbXYQNRgZ4tic9mt2
+# hz6yW4kgMptMgOIshhrVS9RBqdD4hoGWMOo8kN1jnBhaNs+r1maFoZqMrZyty1em
+# +6dei6D2nGTijM3HovJa+nh3JTehggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjE1MjlaMD8GCSqGSIb3
-# DQEJBDEyBDCQmpKs4xrnjCANcAowHfjjDcZVEpVO+lS43OMD9BHHPGdN/4BnmQZO
-# M/Dp+PFs7bswDQYJKoZIhvcNAQEBBQAEggIAX4mjkzfckD1acjbole9S8UWhZI8C
-# HzMzUkas9Z/PTafuN46YHYnzwBzj+RlTZKJdPEIO4OTq1EhbGKNzNmZcrXCVf8JD
-# BK2r4SfoJp8F6XbPamea5MluXknRbntAaCkfYaJxKxdV8iUlej477HF041ZY0HRJ
-# QtWR4lSwH+jESDH7FDilnGMjH5JWKL8S8PvlREoB4vOXveRh3Eg25jvHDlqaAbOZ
-# emKM9JeYE0+veWVpkcBcasf4QQYQqR5lQeCyQcjn2VuBFcb6F/0SRMVMGlxiakv4
-# wHe0ULUkqjUyWSWr0ydKSVSVRlkayDN5tzmqMhLb+MM/HajKwJrpR4/r/djTH8KG
-# I+CDfuNGGVKeuKJb5aDNFJefqiJsIwZb24GTqZWC4JAY31OHrJE1JnN7+dliq3C5
-# xfxh3yDsHEYA2uzj8W8sVw/BAEP4JcEWDCHZqH9yFig8c+G0K/D/I26Q3K1RIaWF
-# 2jt0kgr1SVTcxzYRGe2qfHYsL6gPfAzSoD0cqzFupiEga1ricABq/ixSDAKv2isw
-# chtNZth96O8XePWxDyUz41jkMAUSCTlJS5P0ppYq2n2LBVcQN4CG8SYW2uvFxkUJ
-# vYlo6mQpvuKb0so2BS8pFubCOVoMVTtFPN/YA5Fw5gcK8payG6gLlWafphsBzi/z
-# AoBjfc8Jckq39MU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAyMjEwNDBaMD8GCSqGSIb3
+# DQEJBDEyBDCAFk5oXx5GAHZBdZ8XFW/tS/WAKHfucYgRbyOHxshOfiA2UtS7CUqo
+# n44TzmJtF2EwDQYJKoZIhvcNAQEBBQAEggIAELRH6drVptz2IK0grkXaMk6nWmFZ
+# 05zSXUqU9FVeRzc3DGJ5zKJd1tcS2aYfIfPXu4nF3oVqibZXy/G619EJzx2g9C/E
+# zAruNDf2JSpd2z8edVB/o8PuF99QmRJtWbSdPXSaJ9PSqcpVfw97+eUCEd7GfP8X
+# PyuK7k45hfsVivmstEg0C4GfiFC4U1lQT6/DyCLRUMEpB7O0z3rFUrRF6WVJ2mnA
+# oUChHHmD4W+FUPlxckHDLJzkDjdE34SkJlmSVRP4vCUopTkLZHKYN4woRIkO/Siy
+# cSORj4mtf4G5axlvASTEt8YWl8IWH+Sv/IrRiVgXJpBynFZ3HnyHuyEmMMvDCKK9
+# Fvxd2m3/LP3h/LarCpp/Iennw8EQ3vIqEVoq0+VZ6cv99nEcjVHxXXh86DgyyHjp
+# vee+nuYOonusf51afwBZQqKzVA5pb33WuEfwQvOlp0YDQvsYUa2wsrofOv9gM51q
+# SaIAMZRRUBCBphrGQ6+EqgE5UOJVqKnMS3R6ioEwoOe3k5IpbMr75llsyasL5PXU
+# eLjjokSSS+lRL4hYJXI676oQj7OVorJF6X1hCzuXIufrPMutD+vs/vqvDRRF+15m
+# hF6pVJ2UKyFrwkPHDQED+a7JHbfcpwMeN/H3UR39NhzWdt61kuDJRWo2pnMpycPK
+# hLwHLUSVO9ayWUY=
 # SIG # End signature block

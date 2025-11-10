@@ -1,5 +1,49 @@
 function Get-InstalledSoftware {
+    <#
+    .SYNOPSIS
+    Retrieves detailed information about installed software on the local computer.
+
+    .DESCRIPTION
+    The Get-InstalledSoftware function collects comprehensive information about installed software packages
+    by combining data from Windows Package Manager and MSI products. It provides detailed properties including
+    product names, versions, installation dates, manufacturers, and product codes.
+
+    .EXAMPLE
+    PS C:\> Get-InstalledSoftware
+
+    Retrieves information about all installed software on the local computer.
+
+    .EXAMPLE
+    PS C:\> Get-InstalledSoftware | Where-Object {$_.Manufacturer -like "*Microsoft*"}
+
+    Gets only software published by Microsoft.
+
+    .EXAMPLE
+    PS C:\> Get-InstalledSoftware | Export-Csv -Path "C:\Reports\InstalledSoftware.csv" -NoTypeInformation
+
+    Exports the installed software inventory to a CSV file.
+
+    .OUTPUTS
+    [PSCustomObject]
+    Returns an array of custom objects containing the following properties:
+    - ProductName: Cleaned product name (version numbers removed)
+    - ProductNameOriginal: Original product name as reported by the system
+    - InstalledProductName: Display name from MSI metadata
+    - VersionString: Version string from MSI metadata
+    - InstallDate: Installation date in yyyy-MM-dd format
+    - ProductVersion: Package version number
+    - Manufacturer: Software publisher/manufacturer
+    - ProductCode: MSI product code identifier
+    - PackageName: MSI package name
+
+    .NOTES
+    Function  : Get-InstalledSoftware
+    Author    : John Billekens
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
+    #>
     [CmdletBinding()]
+    [OutputType([PSCustomObject])]
     param()
     $msiProducts = try { @(Get-MsiProducts) } catch { @() }
     $packages = Get-Package -IncludeWindowsInstaller -AllVersions -IncludeSystemComponent | Select-Object *
@@ -31,8 +75,8 @@ function Get-InstalledSoftware {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCA9YBq+4YORZEMn
-# Gbd9Y2FDNFGwJWAFipW0Ad6L+4q9PaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCh9H33+VH0kVa9
+# mP1+dOyey2kRotxdOpx2JH+q4rFU1aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -208,31 +252,31 @@ function Get-InstalledSoftware {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCD0HpZ4Svt7EnQyADD5mtHkyJPZLqMjeR1OWjZtz62w
-# +jANBgkqhkiG9w0BAQEFAASCAYBPxQL7rH1mm7qAwVqv1WnYxPOW01wyWHPmm6s3
-# jgATISsnIZvSjWHXAyC/Y/S+N8V1QfyZyzT4SfjobDn+w/hxt4CpsNdmOAJeotI1
-# pWpiykqL+oNAG5cNoXpKeSdoAkFwUyyDz721j6bWnJDEgbzk99WjBQqzdM21OsGx
-# 3PpgylJP1kWa2PKR+tDv1yTEZRBHniigaIF3ibO6NuugGrOCXfkyymGpKVJaXIy5
-# kEik9/SXUtF7Pu/FRVRoArQW9pKpiwel6JcjkMjEPsjuTdlEHgmTri9bGCOshcrI
-# 2UFUVyxEXuZh8jUv2lLTkpN4Qz25avjeOgM1mInSgzMGwqf7j6VQ/Dg0ts1Mpqgx
-# iFtD8hzW9akrBVkMAVjy/Gz+fnz7Ch4uEfr19Jz4tYrtKcKoW1DvaGTfZpkeoyjf
-# /UuwYR0dsLFg8aj/4YVGuZ7W/uDwLgNDJNCPaTg0dIixW+9Alups+35F8bQJL+7D
-# tqCa7nAy19l4edrJSzBcsA4Js86hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDNlQ2hXbhQxlXMUR/T0TEj0A98BZQ504PyWDShe4/j
+# LjANBgkqhkiG9w0BAQEFAASCAYBYjxi2o239+p30S/9OrCYZoL4SNoQTIXJUbGk3
+# /BnkMrRlRLKN4dnBFu8nvADspsQot1f+Zf/sjdirnyg28Mc7oZpxPV9EZV5odilm
+# ri2b8zEr/04mem1jegqoMnVN5mx3zW0urmK/8KIZM6nmCvSqkZ31e+9HRvgZQh5t
+# yg4O60qfhr2ptjB9o1Cen4sQOC6szQq9srgJfc73UCkgR4ud0/Aend+shQiB/ev3
+# +FHpRHG8qQFgLYUPBitjkzjUPYtzKbw9qR/QqUu6vO5PIHIKJkAOaGjEFdni8Sfn
+# 9s7KbRdGdY3tXz7pU4ndIx6P2hbU0ZsUgYi+9QkPLLn6aH1oeOU+V3cu4Pqa0XYO
+# Kg5/JFwvmBJE3gpPUVpQjJiYUuLHfVWHEvexFvF4ksppoTxmb58YsO7M28KFPSsw
+# P6hlliM1cNfxmdWDNR/lkNMXWsWFclRXM/Wy7a+6wa56tewcB4eJUOAoaVwGavk8
+# 5Uoi3TDBXzbVmUORTxRsujCWsOKhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjE1MDJaMD8GCSqGSIb3
-# DQEJBDEyBDAudXGyiB18+l2AdtdWyog7wwvS+vqgluE+wpVBeXUfagIeGmnTr8AW
-# bNTInAdGbjIwDQYJKoZIhvcNAQEBBQAEggIAx3NvcVvGRhG8UEZuw+X9Qfl7RYzV
-# R4dX2Mh9Ll4OtvDvjYmbNl38w0s8p+hkjuFyUMS2nNb+xz1JFtsj9aDqFCTstqBb
-# FdhwwyTnaEekTtqE1372Md337bXUD4+YF8ffoIzjWJZa4r8nTHCzKaKEkSFyEMrA
-# AYpdmaTgItiTzOv7IVHH2PaNH5K+wPD9yRtnvXp+P6r3w+lWl3fMxvHNWjONMJU2
-# J0gN7ETMi7GEtJIRdck6RK8GIZaT/ViDNZVEArTgRyJwx4ze5yGlnKz1nURxayiz
-# nIL3NqcBCLghmBfzStXnUnVqWoujvNoGrEUJ8sNKZ88T+3TZ55Hjo2hWnT1yRML8
-# TzBEHfSkoaei7OOhpMyNeYvFPwJbKaQUzpkbFsuSvgpdXR9so/K8maNdGq+8wGLk
-# 6pbqOpEVn2ogfEhtDfTmBNpZXeyVZlgnnpeT3AJurUx2/2LGo2X6GQI9gQ14Zypr
-# U3KxBFh3W13HO5W2Kt3Cl1o+j6ba6LbTIWQY1VEkuuNpLrAQ2Ml9YNnIyyTeYmoI
-# nPdx/KIYBoZe7MWdAamQp2gYGB0AKnocRl3BG/mmb4AhEpABMhIv/AwtxVzzIWhQ
-# peFkI3/aJDmsrrsWxW3zc8/YGUyObmFHcFVIr8bs4XkeW3hpavWa39JxY0dbXS1w
-# xnyKt4xeMJunDUU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAyMTAzMjdaMD8GCSqGSIb3
+# DQEJBDEyBDDyu/l8emJB6HZQZbPPzYyP+A+vMX+XSo3tl/ja7RVAI/3JaVNB3h6S
+# MViU2d3HfsEwDQYJKoZIhvcNAQEBBQAEggIA0h3PlmMtDqnVAFX7hUXl0ZsRc5bK
+# Gnonzr7bLLegOIPfEKQXxBxquTCAnGkZ1yMpVsKDFlc0by8HcsahG1IQ0J9KJUSt
+# ilnTOzte9Cg3M9kTDRVL+WLkKQG9CjWNTi5BGcHry3RJ+gTOHb0aKWVtIkh+qVu4
+# w5/r9FYw+EgEhyXoY6oujz4XVzNslJKd05FuyAf50d7f+NMkhx1DisAF307gYEs5
+# tbDMgeQgrOEYWLo0ddjhNojePU09IKUf5Mi9UuzVwau/jHjtj+Stu4k7J3a8h66L
+# oinW+vvfYulpDy6kIIJ7geIhjplQzxQvM27YcJ8dNRh2e5zKdb5zlRZn9UUyHXul
+# u1O3vIJD/w7cXyJNTrrsfC87QWpLyr7GcWe3HysL3zjuiAmyFnxPXz9aCSbpCvj9
+# /JNkDuJEwwLwEx2GzYKguuwwbPvQlulSvfxCQAro8jZ4JbkCdYz+2FATJACSeldy
+# 7n40mC5phLsHgs8iWTeaplO3PxQAlLZzhn8xNVwCmGqTmTLe8+khVk5F02kyV2GR
+# qrBub4fj+QB5sDsXrImi0tiwEe9iOBlvThKQh7jQ7ENvWKA3FWM74HUWFE7NKqyd
+# Ve3rGKuIFfTStIHZdDpFBiNO1xC8tsRSzXvqPmFvkf+K/neK741/a38K7aaclLEf
+# FqTRHUTZbqhrkXk=
 # SIG # End signature block

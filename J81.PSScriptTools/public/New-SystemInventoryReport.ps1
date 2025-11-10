@@ -1,26 +1,65 @@
 function New-SystemInventoryReport {
     <#
-.SYNOPSIS
-    Generates Markdown and HTML reports from SystemInventory.json
+    .SYNOPSIS
+    Generates comprehensive system inventory reports in Markdown and HTML formats
 
-.DESCRIPTION
-    Reads the SystemInventory.json file and generates professional Markdown and HTML reports
-    with sortable/filterable tables. Output files are timestamped based on WindowsUpdatesLastChanged.
+    .DESCRIPTION
+    This function reads the SystemInventory.json file and generates professional system inventory
+    reports in both Markdown and HTML formats. The reports include dynamic tables with proper
+    formatting, color coding, and sortable/filterable content. Reports are timestamped and
+    include comprehensive system information, Windows updates, installed software, capabilities,
+    optional features, and Store apps.
 
-.PARAMETER JsonPath
-    Path to the SystemInventory.json file. Defaults to C:\ProgramData\SystemInventory\SystemInventory.json
+    .OUTPUTS
+    [System.Void]
+    This function does not return objects but generates report files on disk
 
-.PARAMETER OutputPath
-    Directory where the MD and HTML files will be saved. Defaults to same directory as JSON file.
+    .PARAMETER InventoryFilePath
+    The path to the SystemInventory.json file containing the collected system data.
+    Default: "C:\ProgramData\SystemInventory\SystemInventory.json"
 
-.EXAMPLE
-    .\Generate-SystemInventoryReport.ps1
-    .\Generate-SystemInventoryReport.ps1 -JsonPath "C:\Custom\Path\SystemInventory.json" -OutputPath "C:\Reports"
-#>
+    .PARAMETER ReportBaseFileName
+    The base filename for the generated reports (without extension).
+    Default: "SystemInventoryReport"
 
+    .PARAMETER OutputPath
+    The directory where the Markdown and HTML report files will be saved.
+    Default: "C:\ProgramData\SystemInventory"
+
+    .PARAMETER HTMLOnly
+    Generate only HTML report, skipping Markdown generation.
+
+    .PARAMETER MarkdownOnly
+    Generate only Markdown report, skipping HTML generation.
+
+    .EXAMPLE
+    PS C:\> New-SystemInventoryReport
+    Generates both Markdown and HTML reports using default paths and filenames
+
+    .EXAMPLE
+    PS C:\> New-SystemInventoryReport -InventoryFilePath "C:\Custom\SystemInventory.json" -OutputPath "C:\Reports"
+    Generates reports from a custom inventory file and saves them to a specified output directory
+
+    .EXAMPLE
+    PS C:\> New-SystemInventoryReport -HTMLOnly -ReportBaseFileName "ServerInventory"
+    Generates only an HTML report with a custom base filename
+
+    .EXAMPLE
+    PS C:\> New-SystemInventoryReport -MarkdownOnly
+    Generates only a Markdown report, skipping HTML generation
+
+    .NOTES
+    Function  : New-SystemInventoryReport
+    Author    : John Billekens
+    CoAuthor  : GitHub Copilot
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
+    #>
     [CmdletBinding()]
+    [OutputType([System.Void])]
     param(
         [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
         [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json",
 
         [Parameter(Mandatory = $false)]
@@ -31,22 +70,31 @@ function New-SystemInventoryReport {
         [ValidateNotNullOrEmpty()]
         [string]$OutputPath = "C:\ProgramData\SystemInventory",
 
+        [Parameter(Mandatory = $false)]
         [switch]$HTMLOnly,
 
+        [Parameter(Mandatory = $false)]
         [switch]$MarkdownOnly
     )
-    $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
-    $MarkDownReport = $true
-    $HTMLReport = $true
-    if ($HTMLOnly.IsPresent) {
-        $MarkDownReport = $false
-    }
-    if ($MarkdownOnly.IsPresent) {
-        $HTMLReport = $false
+
+    begin {
+        Write-Verbose "Starting $($MyInvocation.MyCommand)"
+        $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
+
+        # Set report generation flags based on parameters
+        $MarkDownReport = $true
+        $HTMLReport = $true
+        if ($HTMLOnly.IsPresent) {
+            $MarkDownReport = $false
+        }
+        if ($MarkdownOnly.IsPresent) {
+            $HTMLReport = $false
+        }
     }
 
-    try {
-        Write-Log "Starting report generation..."
+    process {
+        try {
+            Write-Log "Starting report generation..."
         Write-Log "JSON Path: $InventoryFilePath"
         Write-Log "Output Path: $OutputPath"
 
@@ -104,8 +152,23 @@ function New-SystemInventoryReport {
                 }
             }
 
-            # Save Markdown file
-            $markdown | Set-Content -Path $mdPath -Encoding UTF8
+            # Save Markdown file with proper UTF-8 encoding
+            if ($PSVersionTable.PSVersion.Major -ge 6) {
+                $markdown | Set-Content -Path $mdPath -Encoding utf8NoBOM
+            } else {
+                # PowerShell 5.1 - Use StreamWriter for more reliable UTF-8 without BOM
+                try {
+                    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+                    $streamWriter = [System.IO.StreamWriter]::new($mdPath, $false, $utf8NoBom)
+                    $streamWriter.Write($markdown)
+                    $streamWriter.Close()
+                } catch {
+                    # Fallback to File.WriteAllText if StreamWriter fails
+                    [System.IO.File]::WriteAllText($mdPath, $markdown, [System.Text.UTF8Encoding]::new($false))
+                } finally {
+                    if ($streamWriter) { $streamWriter.Dispose() }
+                }
+            }
             Write-Log "Markdown report saved: $mdPath"
         }
         if ($HTMLReport) {
@@ -403,8 +466,23 @@ function New-SystemInventoryReport {
 </html>
 "@
 
-            # Save HTML file
-            $htmlContent | Set-Content -Path $htmlPath -Encoding UTF8
+            # Save HTML file with proper UTF-8 encoding
+            if ($PSVersionTable.PSVersion.Major -ge 6) {
+                $htmlContent | Set-Content -Path $htmlPath -Encoding utf8NoBOM
+            } else {
+                # PowerShell 5.1 - Use StreamWriter for more reliable UTF-8 without BOM
+                try {
+                    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+                    $streamWriter = [System.IO.StreamWriter]::new($htmlPath, $false, $utf8NoBom)
+                    $streamWriter.Write($htmlContent)
+                    $streamWriter.Close()
+                } catch {
+                    # Fallback to File.WriteAllText if StreamWriter fails
+                    [System.IO.File]::WriteAllText($htmlPath, $htmlContent, [System.Text.UTF8Encoding]::new($false))
+                } finally {
+                    if ($streamWriter) { $streamWriter.Dispose() }
+                }
+            }
             Write-Log "HTML report saved: $htmlPath"
         }
 
@@ -417,21 +495,30 @@ function New-SystemInventoryReport {
             Write-Log "  - HTML: $htmlPath"
         }
 
-    } catch {
-        Write-Log "Error during report generation: $($_.Exception.Message)" -Level "ERROR"
-        Write-Log "Important Error details:"
-        Write-Log "$($_ | Get-ExceptionDetails -AsText)"
-        Throw $_
-    } finally {
-        $Script:LogFile = $null
+        } catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Error "File not found: $($_.Exception.Message)"
+            throw
+        } catch {
+            Write-Error "An error occurred: $($_.Exception.Message)"
+            Write-Log "Error during report generation: $($_.Exception.Message)" -Level "ERROR"
+            Write-Log "Important Error details:"
+            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+            throw
+        } finally {
+            $Script:LogFile = $null
+        }
+    }
+
+    end {
+        Write-Verbose "Completed $($MyInvocation.MyCommand)"
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDykf1gCPmiHJzH
-# 81z0pwWj08NEg7IHxW//wa4rNR2vlaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBXDZDp4CT578FM
+# fQT7o+cp3su2cunNt3yV2LD2Z1/eNKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -607,31 +694,31 @@ function New-SystemInventoryReport {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCDHk+BMdoH35P0MpkOBzavZh/oFwWHPLYXz1yGgcfz4
-# izANBgkqhkiG9w0BAQEFAASCAYBD2XdTAiafQwTgvoyCTqADomWkfqcSQ4qKxCE1
-# JHdTBU8DRXiJVVFi0YgB6viUclmrm5wncq1djnwdYPLNzvHDubdb4mChZuObVSJj
-# g9h+vOKN6JHVzpNeUYK61uFFpIbnW4dGRdDymZ3/amqXd0ETnZpbeOTqXEl9rN/M
-# kmNlP/drub5ZxWqmszNzlXKlZZjMGjLaHC0x6ygEGu1oXxRECNNqy9PIbaElXg/j
-# /HErp2RtpqoTFYQQeHIAldhD1iR61P1m1QQcTw82gjjVfuhJMadqQ6lKwuqNIzwD
-# 2g/fxSWjVHfqbVVLcxGzazx7pvb/LOnSgPXZF4XuBfjCfN9zdcDH4eux6UgVMjpk
-# sQiI53ejGq9CEL4nsWEpPudrBDDQ8FcSgPI6uxnN6yLMzqXwmmkz7rUG+J/wWrWg
-# o/RMDC9yw7x4QGoSX2SHb9qRnBrlxeLMwY4LeC/dDZA6Z8jns+fS+M6UFvw0aTV1
-# g39Pq9j8102z9/KmoagXHfQqD26hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDrCJYU/JZjkcf1bvzItb1bEhK+7a1Z5nI+8mcoMq6W
+# 6TANBgkqhkiG9w0BAQEFAASCAYAJkxBM/nrit+ohqkLlCwh4OFHACieQrqlYYzns
+# 9C/VQMdFSyM5QjJsmPbtYAbCSEWo+Ne09Q5sE5UZrxLhBw+3CPFo+R98CY8czNJ/
+# Hhv8VKcdjsOfFJCS48+j3ZUuAKotH9K+Nbk+VtdicMKdXVMGrML0Iq0rtKeAWxWX
+# 8M/qDnDjpRTl6gkryn0mtQDsXrNdY8TbfTFkv8r6SGtnbzcJk0qHRoFVowPSDakT
+# CBNqMsUz5Z5rGZVWnUBGHEQYdUOCxH2TYDYBkH1JQVQ7/W+I22tru13Ep97AIlE6
+# zPAsROHUxVoFwxjHFE4Wup5ikKfkhWerdnE0LktsW9lJaQSxLq/LaCtH6Nj+Ly+M
+# LKaezbPM00wlqNV382F75QI/8vevbazGfih/5I4yZ3ehDZp8OaRVUaqwUz8Bnsyw
+# pOObSh5zF8+t45Qnxc6D/xN/fBdRsbhh3HkDJD0BIU0XSQBv8eR7dX1GcFXaaL13
+# jN0eNl0FhrF+/7wiXbFzOvu/ya+hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjE1NDJaMD8GCSqGSIb3
-# DQEJBDEyBDD6YiY/uElM/WO4RJTyPFEo4IJOONaeZs+L383Cs/15NRzsEMsWsXPv
-# 5/pjWOHflk0wDQYJKoZIhvcNAQEBBQAEggIAAIstwFQ6HzOwdgc7bPMr+LwlS7Gj
-# 2E24wVKbkuVr8L6ACwmYNiNOxNPDq4iBIsLknS/DruUwAqm7undpe1uOk+htf5Li
-# iw9Xsz+u/jvOI0po2kE143m0NhNJ17++h9AjumgDiR+j+mHWzbk9M+qqtqSt0Ata
-# B+gMayTVKjDu0IsZLxbOCkUpighZTWx4VLpQRB0OyBzeqHEBkJI8JIyuAKivv4Ve
-# A0DW7UIZi/GbDF5ZhWAi9cK6Bb3HmWwKkCa1ulph3R7uF4AlMA9er2t3cmdPYGNE
-# WiKf8ZATUdheIGKclNnDf+0nrdWjraxRnfvKn369C/Ehyj2KWTwZByJW3MegI8I6
-# hP7+H5HGJFGoz+WqCpCVo+w5e0OCLCSDHc74bkvn88dFw0DIwcScI16txOKl2zhg
-# 9Lm7Xz2H7boltq4NBpn+kp5EdnimJHg1chS/c+8VWeqldeKonOGAikrzfLxDENma
-# MUeLuYcMm7GIaiJUWls26zt+sMUgmQMOf5fkILzQP5oV7jsd+pPuYozPL88VsFoP
-# mIHTnmqn0yPYAEvtvIg+3THcRpdgtmyRdj6dsndzJvQlJwZwLLlmpttR/J3hwWyR
-# uN8oGmgdJnq9/uMBfNWTLemJd9w6O/SwyT5uMu0fVimPf6KPPcr7JrXlDYoa/HCl
-# XyixCuJNAS0GAbg=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAyMjEwNDZaMD8GCSqGSIb3
+# DQEJBDEyBDAlR8JQawv+yXZ4Z+n9Bqy8fZO+zSTmSvX79W1mpuOVu7Nqw28Fv0fl
+# t9SKjX6Q19EwDQYJKoZIhvcNAQEBBQAEggIABKRNSrxaYDkqGFaQfPECkPoqYYZL
+# Yk1x60I6OPbFc8nQXT/jf/6KAzlltYi62vup1Vitlrfko4yxDCv60UZs8ckplEBI
+# Il67Sy6IbwCABA7ery7+yTsmrLuoqjNhP5jHuVuYuyo27HbjHqC4vBZReO5iEZfa
+# Otsele2/zdelLHFwUEf5cE1ek/9BCvPCiXv+IO7Pa4WoEFvliTpy++989MMVO920
+# zkaOF0iXE9nchWGjXBdjyn4joYXhrLaGO//Eo4h6H6sMDg6QeyXV0KvVq8ccVFoA
+# vojP/OcpSjlqpfGbS05ANLmac7yh/icBe7oF4Mks+7p1RBNxg0ept6vMobCHpK/W
+# 7D1lwtRdgy0lDWiKIAFnAQEEHXVaf/77LDa6WPT3NPM7LRhXI7T4CDjKSfgzkJfm
+# Pv0sk+kkUqdG9uVoXEqKYWXb+TrqnLodYg9cQ1BTB1z2SvRM4siQubXpW0mYm4Hc
+# Kf/1TGHVQ7ljm8iCJusaex7z4joe1cVqoB5v5iVX/r2lMX5RROafX3Ny2KYYT2X9
+# 9oS8FlDmd+JTINZI1y9CmJ+Hrh1Ly4bv7SEdnAgmAaSm7ZbkBq8o0fLyivdRNL8T
+# PAcXJNW1wk6G+RIRJjuYiIkTWprN75+vfcPjGTgWWb6vk/Y6JqcNkY0q37f+sLwx
+# 76WHbTGKRfeMPJw=
 # SIG # End signature block

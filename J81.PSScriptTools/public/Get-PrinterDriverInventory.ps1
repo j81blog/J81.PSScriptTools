@@ -1,110 +1,150 @@
 function Get-PrinterDriverInventory {
     <#
-        .SYNOPSIS
-            Get installed printer drivers and save them to a JSON file.
-        .DESCRIPTION
-            This script retrieves the installed printer drivers on a Windows machine, excluding specified drivers, and saves the information to a JSON file in a specified inventory path. It also updates the computer name and last changed timestamp in the inventory file.
+    .SYNOPSIS
+    Collects installed printer driver information for system inventory reporting.
+
+    .DESCRIPTION
+    Retrieves detailed information about installed printer drivers on a Windows machine,
+    excluding specified drivers, and integrates the data into the system inventory reporting
+    framework. The function collects driver details including name, version, manufacturer,
+    and environment information.
+
+    .OUTPUTS
+    [PSCustomObject]
+    Returns printer driver inventory data integrated into the system inventory framework
 
     .PARAMETER Exclusions
-    An array of printer driver names to exclude from the inventory. Default is "Generic / Text Only".
+    Array of printer driver names to exclude from the inventory collection.
 
-    .PARAMETER InventoryPath
-    The path where the inventory file will be saved. Default is "C:\ProgramData\SystemInventory".
+    .PARAMETER InventoryFilePath
+    Full path to the system inventory JSON file where the printer driver data will be stored.
 
     .EXAMPLE
-    Get-InstalledPrinterDrivers -Exclusions @("Generic / Text Only") -InventoryPath "C:\ProgramData\SystemInventory"
+    PS C:\> Get-PrinterDriverInventory
+    Collects all installed printer drivers (excluding defaults) and saves to the default inventory location
 
-    This command retrieves installed printer drivers, excluding "Generic / Text Only", formats the output as JSON, and saves it to the specified inventory path.
+    .EXAMPLE
+    PS C:\> Get-PrinterDriverInventory -Exclusions @("Generic / Text Only", "Microsoft Print to PDF")
+    Excludes additional drivers from the inventory collection
+
+    .EXAMPLE
+    PS C:\> Get-PrinterDriverInventory -InventoryFilePath "C:\Custom\Inventory.json"
+    Saves printer driver inventory to a custom location
+
     .NOTES
-    function Name : Get-InstalledPrinterDrivers
-    Version : v1.0.0
-    Author : John Billekens Consultancy
-
+    Function  : Get-PrinterDriverInventory
+    Author    : John Billekens
+    CoAuthor  : GitHub Copilot
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
     #>
     [CmdletBinding()]
+    [OutputType([PSCustomObject])]
     param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNull()]
         [string[]]$Exclusions = @("Generic / Text Only"),
 
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
         [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
     )
 
-    try {
-        $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
-        Import-Module -Name PrintManagement -ErrorAction Stop
-        # ===== Retrieve Installed Printer Drivers =====
-        Write-Log "Retrieving installed printer drivers"
-        $printerDriversInstalled = Get-PrinterDriver | Where-Object { $_.InfPath -notmatch "printqueue.dll" }
-        $printers = $printerDriversInstalled | Where-Object { $_.Name -notin $exclusions }
-        $inventoryResults = @()
-        foreach ($printer in $printers) {
-            Write-Log "Processing printer driver: $($printer.Name)"
-            try {
-                $driverInfPath = $printer.InfPath
-                $driverFilename = "$driverInfPath".replace("C:\WINDOWS\System32\DriverStore\FileRepository\", $null)
-                $driverParentFolder = Split-Path -Path $driverFilename -Parent -ErrorAction SilentlyContinue
-                $driverInfFileName = Split-Path -Path $driverFilename -Leaf -ErrorAction SilentlyContinue
-            } catch {
+    begin {
+        Write-Verbose "Starting $($MyInvocation.MyCommand)"
+    }
 
-            }
-            $major = ($printer.DriverVersion -shr 48) -band 0xFFFF
-            $minor = ($printer.DriverVersion -shr 32) -band 0xFFFF
-            $build = ($printer.DriverVersion -shr 16) -band 0xFFFF
-            $revision = $printer.DriverVersion -band 0xFFFF
-            $driverVersion = "$($major).$($minor).$($build).$($revision)"
+    process {
+        try {
+            $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
+            Import-Module -Name PrintManagement -ErrorAction Stop
 
-            $inventoryResults += @{
-                Name               = $printer.Name
-                Provider           = $printer.provider
-                Manufacturer       = $(if ($printer.Manufacturer) { $printer.Manufacturer } else { "Unknown" })
-                Version            = $(if ($driverVersion) { $driverVersion } else { "Unknown" })
-                MajorVersion       = $printer.MajorVersion
-                InfPath            = $driverParentFolder
-                InfFileName        = $driverInfFileName
-                PrinterEnvironment = $printer.PrinterEnvironment
+            # Retrieve Installed Printer Drivers
+            Write-Log "Retrieving installed printer drivers"
+            $installedDrivers = Get-PrinterDriver | Where-Object { $_.InfPath -notmatch "printqueue.dll" }
+            $filteredDrivers = $installedDrivers | Where-Object { $_.Name -notin $Exclusions }
+            $inventoryResults = @()
+            foreach ($driver in $filteredDrivers) {
+                Write-Log "Processing printer driver: $($driver.Name)"
+                try {
+                    $driverInfPath = $driver.InfPath
+                    $driverFilename = "$driverInfPath".replace("C:\WINDOWS\System32\DriverStore\FileRepository\", $null)
+                    $driverParentFolder = Split-Path -Path $driverFilename -Parent -ErrorAction SilentlyContinue
+                    $driverInfFileName = Split-Path -Path $driverFilename -Leaf -ErrorAction SilentlyContinue
+                } catch {
+                    Write-Verbose "Failed to process INF path for driver: $($driver.Name)"
+                    $driverParentFolder = "Unknown"
+                    $driverInfFileName = "Unknown"
+                }
+
+                $major = ($driver.DriverVersion -shr 48) -band 0xFFFF
+                $minor = ($driver.DriverVersion -shr 32) -band 0xFFFF
+                $build = ($driver.DriverVersion -shr 16) -band 0xFFFF
+                $revision = $driver.DriverVersion -band 0xFFFF
+                $driverVersion = "$($major).$($minor).$($build).$($revision)"
+
+                $inventoryResults += @{
+                    Name               = $driver.Name
+                    Provider           = $driver.Provider
+                    Manufacturer       = if ($driver.Manufacturer) { $driver.Manufacturer } else { "Unknown" }
+                    Version            = if ($driverVersion) { $driverVersion } else { "Unknown" }
+                    MajorVersion       = $driver.MajorVersion
+                    InfPath            = $driverParentFolder
+                    InfFileName        = $driverInfFileName
+                    PrinterEnvironment = $driver.PrinterEnvironment
+                }
             }
+
+            # Save Inventory
+            Write-Log "Saving SystemInventory..."
+
+            $inventoryData = @{}
+            # Add or update PrinterDrivers section
+            $item = "PrinterDrivers"
+            Write-Log "Saving $item..."
+            $inventoryData[$item] = $inventoryResults
+            $inventoryData["$($item)Report"] = @{
+                Order        = 7
+                Title        = "Installed Printer Drivers"
+                ReportFields = [Ordered]@{
+                    Name               = "Name"
+                    Version            = "Version"
+                    Manufacturer       = "Manufacturer"
+                    PrinterEnvironment = "Environment"
+                }
+                SortBy       = @("Name")
+                SortOrder    = @("Ascending")
+                Highlight    = @{}
+                Searchable   = $true
+            }
+            $inventoryData["$($item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+
+            Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $item
+
+            Write-Log "System information collection completed successfully"
+        } catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Log "Inventory file path not found: $($_.Exception.Message)" -Level "ERROR"
+        } catch [System.Management.Automation.CommandNotFoundException] {
+            Write-Log "PrintManagement module not available: $($_.Exception.Message)" -Level "ERROR"
+        } catch {
+            Write-Log "Important Error details:"
+            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+            Write-Log "An error occurred during printer driver inventory collection: $($_.Exception.Message)" -Level "ERROR"
+        } finally {
+            $Script:LogFile = $null
         }
+    }
 
-        # ===== Save Inventory =====
-        Write-Log "Saving SystemInventory..."
-
-        $inventoryData = @{}
-        # Add or update PrinterDrivers section
-        $Item = "PrinterDrivers"
-        Write-Log "Saving $Item..."
-        $inventoryData[$Item] = $inventoryResults
-        $inventoryData["$($Item)Report"] = @{
-            Order       = 7
-            Title       = "Installed Printer Drivers"
-            ReportFields = [Ordered]@{
-                Name               = "Name"
-                Version            = "Version"
-                Manufacturer       = "Manufacturer"
-                PrinterEnvironment = "Environment"
-            }
-            SortBy      = @("Name")
-            SortOrder   = @("Ascending")
-            Highlight   = @{}
-            Searchable  = $true
-        }
-        $inventoryData["$($Item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
-
-        Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
-
-        Write-Log "System information collection completed successfully"
-    } catch {
-        Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
-        Write-Log "Important Error details:"
-        Write-Log "$($_ | Get-ExceptionDetails -AsText)"
-    } finally {
-        $Script:LogFile = $null
+    end {
+        Write-Verbose "Completed $($MyInvocation.MyCommand)"
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAIzvqgAaoBdjy6
-# fSYW3MvcpkkywzwrKlVTmAHDbnrzr6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDP35RkfkxkRJYk
+# d9bHE8IrQoGiVxO3Bd9MjqfcKgbh9KCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -280,31 +320,31 @@ function Get-PrinterDriverInventory {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCBYdttn7/G8IFQVJzOi9J/0JdtoSktXLqTtnnRxF6Oh
-# cDANBgkqhkiG9w0BAQEFAASCAYAyckZuda+ZXTS81AXBIJDgHEJGjv8bYpi+0fK9
-# MIXhEhoO3/gcHTXS+ODb8X+Aa5Cuo6eKk27eJl8nXt1qbeClfqM4FYvAdUC+imai
-# nsrMgh6HTdmlYePn+2cEdn0nQsZ3J0Ie2WvzgoYI97o4Rp76kwplkKaiPt1LHhzW
-# xYUpxOxbxv19zosZkbq0TGhW/RrSKnqWMNrBzK362IUNCxscaOFJa9NTuCPJ8Ked
-# bvi5pigNatBNvR1dCcu694A2Zxpg6E3i2vo7O90jDBvXVNmgjwIU3mdstrcKIzlJ
-# FMIQu3zciswL3xaatMjuio3g7inZSX1Dqup6oF3ksDyJuct9LcVjzZZQ1ZNcyNfs
-# 70ncAgu4xoGeFRb3pyQxHpU3HPtQ9xj/V85LMrrV3sKls58tseWGdNHSgWOD1HEO
-# gA0h4YOtEUn9L8X5+Y9WNd+zgszmstDLJcuip2zlMTI5GbXLfF8/ix76BuFlFmfc
-# oaA83GYx5nuQVua+XFuQejYtQjGhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCAY4P6RzEmt4dXF7zQh/iriN0ia9DnbcXJqj+a31GhU
+# QjANBgkqhkiG9w0BAQEFAASCAYCcFEVFPdxra+9P4ssNRnFJ3dHWexjnReW+4sYq
+# d52MCas2pMrDA2QJyauk1oSBrR/qtVeXPKayGEeiwHHvRMzPNTxbeM4oi27UDh1I
+# yNNXr239tUtcz1xMJ+sWERWRA/4niMtP+H8knemu1FzIIQNN1gkcetFGsofQKR/p
+# pK0W47rE4Qfuch89ktUg29h7XS9HxIu9bkBbzyp5j2D6ZTRR82OHk0tpZPaODLY2
+# S5f3mNpg2ZHZzco4L1ClujIEmddNmg9J4bHelJOQf/9ERJtH4Z+nY3zrOGi6LsSY
+# 8nFrd3LfLP5XLd/hH3n4czjqj1ni85+qGVTcSTURDbSuVpMvO4OzTpO4g7PZnRjp
+# KdaoSXFCCEoRshnn0Pnx1dMe8Eif4qmTmXEGpImsFogybShOM9dvkh2sn+XwSjQY
+# jW8G8hw6jcVAJH3B06XEkjTYrDWldufLCWG9Gd3WX16Bc9/tRF44YHDj4PdTAaxp
+# 6hFW9puXgac2JBw6mZJqhjHCokGhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjE1MDlaMD8GCSqGSIb3
-# DQEJBDEyBDBuCRgbBQ62c1eLLroCAsamHrHY9B5GKJEqmhc80jXAUS39XiPxYixC
-# FOegnH+tZskwDQYJKoZIhvcNAQEBBQAEggIAG7YnvxvmdrkNop7uz7dCzS0E+1Fc
-# W4KYKwjuZ0xI+kB17qFIRrE4mU1KebQRYyQyvc0NKBIllhiY50MifUjL5gH7mXk1
-# 1aWkBAilGI/cHMqBkHvp97vLeRNmMYX5cXdT0gKtOrkChXoDvjaaEVfqzL1BkTx+
-# V61y9lPrLeaT3oKu79Q8s7RdGvR5dRoBRLIL+9za9JRXx0lwmT8/MuElZ+2rGQBi
-# Bag0C+Pski9PRFvC6xJSMFwYvmeeg6+MZqD13WT0auUQdZ7oQGL4vnwLuv3/INcN
-# A+K/E2qPHD4bpV0sKUIqt7VjzHQFqGdgEjpPZ4CHGwGha8eNXAjZL0NAfntgYYc5
-# fmGYVgK9JzPpqeL1DI4kqRmcLTiRt9GgLk2DN8LK55eNTUSfEXUpCuTEh249OOO2
-# H2HuJR93zrfrphvsl6vpezhO+QTnn+rv13E5Cle8/DFIn28H3uPBd2WFHGFNhRtB
-# pnypyDHKIjd6fHvgU7/RrEFjF/Sr9ToBlkfqeMEYaPE5INZeUultbzQsIXKGaMvk
-# cvvX+iAmblW525AphUiwHM9naYUG8jYXZt2ZXanzgvoE8Xj2ezvNdWT9qgkQ/NwR
-# nAaZOdUFPCBpMAeK7DeQbpFzMJfAufY56+PyXJxwXppL0Eiqio5VYYOP8kabYMs2
-# XIB9O8wVFOzHYc8=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAyMTAzMzNaMD8GCSqGSIb3
+# DQEJBDEyBDA7WF7jQSa9htujZf9tHPerC7r5HupgY3v9STStfyNQMDJdA1KCTQGo
+# Ad8aprxcT50wDQYJKoZIhvcNAQEBBQAEggIAf82P5aS7R7b4GEByKR/Sk0C+e1Hz
+# f7COQ55lF8AWlC4sn9MPxx3xLbVFteTqM0Cp3ERS6q8S2IwkeWF12UB7oH4koWwq
+# S0DyNbRkf/7Afrh/in7MmHqakG9G4kux+oPBHGv0h92rBeL8ryMb3Q7fTqbTSJX7
+# KfVGRUkzmGFTmeWHFFmAnFgql5YYA+6d9nazdDKscXar0OUo8lxh//Fjy0DxUwsV
+# Eed8OMNC6LF3J5pMJFW1CP/4zUve3K8ZdLbUv0QRRHgmMw21uZz/e83axxBTxbDR
+# XYArHSV+mbjQisltjCDR12e2xSz1YyvQ8wkFdvA+pIiXQaHMCDeZQf2gHhwDG5gN
+# P+8iYHOQm4THxFuk1kTfPcI0GJJzocoQ3+fSJjCaF2Q/JhMHfzIAIRO21E/pyKC3
+# 6E1KsSB67JhnS/6FcVqgeLZgDg0oPw2ZCrALyZAs/7vntPoHIbPnnJfxm0zsuv/6
+# esYu7QPn8UVxBlXTjR1yZGHGtoUUI2jHYFQsKWplCYgxR8yBOTEagMvh/DnPsUvl
+# EkEJDQ678tNgDlBsR7G26VnljX7oPbJFsqsbw/KUgPXp3Q1AmPm7h8rN9bBUpsuR
+# jWR4huLRFtLu/iPdYBVU1N7hjyOfSPSwO9Hb71Ko0Dw51HsYTHJ25dw/hh0Xw8Im
+# hKmQoik13ZZgTu4=
 # SIG # End signature block

@@ -1,55 +1,117 @@
 function Get-WindowsCapabilityInventory {
+    <#
+    .SYNOPSIS
+    Retrieves Windows capability inventory and saves it to the system inventory file
+
+    .DESCRIPTION
+    This function collects information about all Windows capabilities installed on the system,
+    including their current state (Installed, NotPresent, etc.). The data is formatted and
+    saved to the specified inventory file for use in system reports.
+
+    .OUTPUTS
+    [System.Void]
+    This function does not return objects but saves inventory data to the specified file
+
+    .PARAMETER InventoryFilePath
+    The path to the system inventory JSON file where the capability data will be stored.
+    Default: "C:\ProgramData\SystemInventory\SystemInventory.json"
+
+    .EXAMPLE
+    PS C:\> Get-WindowsCapabilityInventory
+    Collects Windows capability information and saves it to the default inventory file
+
+    .EXAMPLE
+    PS C:\> Get-WindowsCapabilityInventory -InventoryFilePath "C:\Custom\Path\Inventory.json"
+    Collects Windows capability information and saves it to a custom inventory file location
+
+    .NOTES
+    Function  : Get-WindowsCapabilityInventory
+    Author    : John Billekens
+    CoAuthor  : GitHub Copilot
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
+    #>
     [CmdletBinding()]
+    [OutputType([System.Void])]
     param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
         [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
     )
-    $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
-    try {
-        # ===== Retrieve Windows capabilities =====
-        Write-Log "Retrieving Windows capabilities"
-        $inventoryResults = @(Get-WindowsCapabilityOverview | ConvertTo-Hashtable)
 
-        # ===== Save Inventory =====
-        Write-Log "Saving SystemInventory..."
+    begin {
+        Write-Verbose "Starting $($MyInvocation.MyCommand)"
+        $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
+    }
 
-        $inventoryData = @{}
-        # Add or update Windows Capabilities section
-        $Item = "WindowsCapabilities"
-        Write-Log "Saving $Item..."
-        $inventoryData[$Item] = $inventoryResults
-        $inventoryData["$($Item)Report"] = [Ordered]@{
-            Order       = 4
-            Title       = "Configured Windows Capabilities"
-            Fields      = [Ordered]@{
-                FriendlyName = "Name"
-                State        = "State"
+    process {
+        try {
+            # ===== Retrieve Windows capabilities =====
+            Write-Log "Retrieving Windows capabilities"
+            $inventoryResults = @(Get-WindowsCapabilityOverview | ConvertTo-Hashtable)
+
+            # ===== Save Inventory =====
+            Write-Log "Saving SystemInventory..."
+
+            $inventoryData = @{}
+            # Add or update Windows Capabilities section
+            $Item = "WindowsCapabilities"
+            Write-Log "Saving $Item..."
+            $inventoryData[$Item] = $inventoryResults
+            $inventoryData["$($Item)Report"] = [Ordered]@{
+                Order       = 4
+                Title       = "Configured Windows Capabilities"
+                Fields      = [Ordered]@{
+                    FriendlyName = "Name"
+                    State        = "State"
+                }
+                SortBy      = @("State", "FriendlyName")
+                SortOrder   = @("Ascending", "Ascending")
+                Highlight   = [Ordered]@{
+                    State = "Installed"
+                }
+                Format     = @{
+                    State = @{
+                        Installed                    = @{
+                            color = "lightgreen"
+                        }
+                        NotPresent                   = @{
+                            color = "lightblue"
+                        }
+                    }
+                }
+                Searchable  = $true
             }
-            SortBy      = @("State", "FriendlyName")
-            SortOrder   = @("Ascending", "Ascending")
-            Highlight   = [Ordered]@{
-                State = "Installed"
-            }
-            Searchable  = $true
+            $inventoryData["$($Item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+
+            Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
+
+            Write-Log "System information collection completed successfully"
+
+        } catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Error "Item not found: $($_.Exception.Message)"
+            throw
+        } catch {
+            Write-Error "An error occurred during Windows capability inventory collection: $($_.Exception.Message)"
+            Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
+            Write-Log "Important Error details:"
+            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+            throw
+        } finally {
+            $Script:LogFile = $null
         }
-        $inventoryData["$($Item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+    }
 
-        Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
-
-        Write-Log "System information collection completed successfully"
-    } catch {
-        Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
-        Write-Log "Important Error details:"
-        Write-Log "$($_ | Get-ExceptionDetails -AsText)"
-    } finally {
-        $Script:LogFile = $null
+    end {
+        Write-Verbose "Completed $($MyInvocation.MyCommand)"
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDjG6DX73rG5A93
-# dtdOQU/VFbW/P8L11xn7FHCRiFqBlKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC06QC9yCCKu1DV
+# 9nCVkgIlCAUMUi0d3zZ6v8b6/QXVr6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -225,31 +287,31 @@ function Get-WindowsCapabilityInventory {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCDP4RbitZkwxPVbTaxs5ypR93wQc0rp4VgzQIi+YKS8
-# kTANBgkqhkiG9w0BAQEFAASCAYCC1+3MtdH1iR23p5+NJ7Q3lGJ1LaSW+WYOSzV4
-# DygU5j7JioFyvBTnFzDUxb5mYQt0LCg4FqJFxYbHMG3dM9gaVGrOjiqxZncMqudQ
-# 53xHsqtIuHrx/AGIWEVMyLS3IwLQFi9U7pBbN7PIyhZfOm7M8WD1HiUHg/FvMRJ8
-# Gfk10NiEoTC7r8mBP3NqXdnrhwehDWWOgTwnERDkQsxXRGPRgWW/Vny+8vbQnNjM
-# Bd/yz8fV5bwoAxv1Lx183Rgk2FAhp27DKkH3YqHPWtoCh83Mfxzx1eWLWz6HZNgv
-# Odo4lEhnET2ylRog91zX3kphNYdZot7/POQNYy4hJuRSAxhKvCaR3X6GhZ9dPizB
-# xoedxzTi4OT3j/8cYd/N1/Bxs8qVjsjJFApSerW7pVsO/7dXW0ebIT05yYkOv352
-# yIoIhCEcjFMgOf5Jeprvl/Q+yNNkVmh0lnNlhEbMT0HOgYRVk4urzDNyOfMpHPVT
-# zne8R607dm5wPrv54wdz8gBh50ahggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCBuLlXuSWXJbES7c8ANywQdMwwDU7atxPxDu2jTSSPo
+# tTANBgkqhkiG9w0BAQEFAASCAYASco5SPTekc7v2twS5S5Q7ep/hAsVpFqURbquy
+# 06yfYoUyMp7NzG+cg0+jvQs6Lel4Pu/saB9S6GE9EV3i5iSzskqm89TxpnTTegf5
+# dIqL+YuZN61O0NVL4VBqSMCpM8fF/OhQZdpf+RVbXvimUIvSeNaOmiIceZHxqDdh
+# mbqpmvJ5CumHWsG9DG6Qp8BZQSjy5QF0900GxKkDsiTtHZr9B8MMrajB2TViw2S7
+# vqo8iJjppJO+pxCVL9Me4Ip90C7eYflzEgIedrnzaAIhmCqNFQSTg6aud2B8OhJO
+# 1hE813zVuUvi73RKQCEpvN6ql7B/S73hJfzZ093ROfEAh73iailxQ0tvEjcdfrE3
+# cfTa/by/uCjgAyahKuBVGOadMGdsEV/Cls72o8JWrjjlha3KsgR9WNha5Z9dYVv1
+# lP5hVTm9P5I6RpeRR1y0q3+SyhgedpGaOOq7pGEgcURpFrpfANUxJUP0hLMZ76hr
+# PLvxdSqx791UnFwL/m5OBI/jJrShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjE1MThaMD8GCSqGSIb3
-# DQEJBDEyBDDAoiOPfhsjRzeUXkG62jibuc55mq0yyrBK6T6Z+97WLfzHJ5l2exml
-# 6BqMNGsw6VcwDQYJKoZIhvcNAQEBBQAEggIAjNNeIqGMlh1fsCtE+LZkdMOa10b8
-# MJGurXyeUySpkIu/B7PDv/Y9bjLAIM2SeLzsw0XRX6NOFEHPgPhvbIgWgDoubWYq
-# OBvMORaBQYlAT+6Vlfv4sL22DvORMB0QT8qnDBlARX5+j3xFoGMDvuMCvVqjuva5
-# r+TnswSe2LNYvbxFKbEDOu0ldgVuo01MO96vnZUYFpaH9GIq0hdCkx8mt6kTaS05
-# ZdJIS1v0+py8mLsgCOB7UapehyJEbhcmnqu72lXKk0liRjwRZ9K9fULseQvw0F/m
-# KB1+GaTwI2j84bxwzgJoqhdqWM4hy9mIf/b4RoqipA94+xWmXz/nzQDH3grhfRqP
-# Q+XLsK/nSeOvDaLQEDnl+FmmkDXkV/X7lrph1VqW5NIX8rhoiAFF/CFqeySaLHPn
-# pEKMw1NDQFdiQv7vVESUi6jW1lnaCHIB2aXq41xXhn37Aq1unl7NTzhhul62XoVb
-# TehUwYI9nAME6Mx+aMEUZ0crYsuF6wbx+A1CmWuoJnmwozZG76C4tQIdgqYPoBSY
-# /DR9u7PAJtKcHbry6FrCzNS4H9bRHyO246nPnwD1RP079F8w7pW3L98tZlICaO6e
-# M0zt4NqYTtdLIs7PvTBbJ8h2RmIg0AqrKiPxvMTme+w+gULW2VMiYAJrPoBedtxV
-# CGbxUPZu6L/JZ/k=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAyMjEwMzRaMD8GCSqGSIb3
+# DQEJBDEyBDBE4mts5DSf0wGJIVPSfBVnIDezuumsoiGlvJX0H7hZBE0K3eqpRdks
+# gFOcmR3KZ0AwDQYJKoZIhvcNAQEBBQAEggIAGNSWd5FdKp9aEEL5en7g7DQYStoO
+# CxXg0bjoRzElknHx6O7GIinp8mrf6Nf2zfYSEAfqj2kCXcPHbl+6KdG/DaxPIJre
+# 9RkwZlF+lD1KQxP7ra+RbWdhBtT8+DHi/EaqFN0Z+Nws9hOWtGQtd3TgW5IGIyZ6
+# fL/OUE+aJcaF6PJjjRAmNyMx3jfapmlkgM9Q4Fad1+UyH90YHQTIhuIy3fCta7bl
+# c0GYYvS7S0qHRHu7Ian+LTzUcDuFsSkktmgO2JIpiKl0lQUALxOpNxDGJMdCK9br
+# he1rdALLzYISiEzKU1ulHtONQP4Y1//Apq+noQwFVllQZw97h/hNiw4t8V0Xvhtt
+# La8Zfr2K1X3GrmPxfllKaKFOrD3+dLgy+KE2QLFhEXFNCqbU5YcDu7Hk1J6C/PEJ
+# VmfVh03AfxcEvCuWoV2OLK0nAsVQrg2ASXtaD3FWa0s5psMH+k0m6z3g5pOWHbmO
+# PqfxAF60X7ZxXaYRyukROPDG65fvCXumD1DUjcS4CVGzyPJNzRXLj6mU2aalE5gn
+# t93gHMWc1WjA303xeZKUOcKJ3c1MkVUgeMQSqYJ5ZZgKuhxjnm1ywgGL0M7kBh8u
+# WH583H8E8HIWXWfq1fa2UWgfLbhFhgXm5NpJ03UwA7fFW/j3BrfcrKxg1wJkaJJe
+# tebJx+PSMltOWY4=
 # SIG # End signature block

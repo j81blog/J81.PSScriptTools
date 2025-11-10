@@ -38,7 +38,7 @@ function New-DynamicMarkdownTable {
     try {
         # Skip if data is empty
         if ($ItemData.Count -eq 0) {
-            Write-Verbose "Skipping $ItemName - no data"
+            Write-Log "Skipping $ItemName - no data"
             return ""
         }
 
@@ -47,7 +47,7 @@ function New-DynamicMarkdownTable {
         # Get Report object
         $reportProperty = "$($ItemName)Report"
         if (-not $InventoryData.PSObject.Properties[$reportProperty]) {
-            Write-Verbose "No Report metadata found for $ItemName"
+            Write-Log "No Report metadata found for $ItemName"
             return ""
         }
 
@@ -91,7 +91,7 @@ function New-DynamicMarkdownTable {
 
         # Get Fields (required)
         if (-not $report.PSObject.Properties['Fields']) {
-            Write-Verbose "No Report.Fields found for $ItemName"
+            Write-Log "No Report.Fields found for $ItemName"
             return ""
         }
 
@@ -106,7 +106,7 @@ function New-DynamicMarkdownTable {
         }
 
         $markdown += "| $($headers -join ' | ') |`n"
-        $markdown += "|" + ($headers | ForEach-Object { "---" }) -join "|" + "|`n"
+        $markdown += "|$((($headers | ForEach-Object { '---' }) -join '|'))|`n"
 
         # Sort data if specified
         $sortedData = $ItemData
@@ -126,6 +126,12 @@ function New-DynamicMarkdownTable {
             $sortedData = $ItemData | Sort-Object @sortParams
         }
 
+        # Check if Format is defined
+        $formatRules = $null
+        if ($report.PSObject.Properties['Format']) {
+            $formatRules = $report.Format
+        }
+
         # Build table rows
         foreach ($item in $sortedData) {
             $rowValues = @()
@@ -141,6 +147,19 @@ function New-DynamicMarkdownTable {
                     $value = "N/A"
                 }
 
+                # Apply formatting if available for this field
+                if ($formatRules -and $formatRules.PSObject.Properties[$fieldKey]) {
+                    $fieldFormatRules = $formatRules.$fieldKey
+                    # Check if value matches any format rule
+                    if ($fieldFormatRules.PSObject.Properties[$value]) {
+                        # Try to get icon using the value name directly
+                        $icon = Get-IconFromName -IconName $value
+                        if ($icon) {
+                            $value = '{0} {1}' -f $icon, $value
+                        }
+                    }
+                }
+
                 $rowValues += $value
             }
 
@@ -152,17 +171,17 @@ function New-DynamicMarkdownTable {
         return $markdown
 
     } catch {
-        Write-Verbose "Error generating Markdown table for $($ItemName): $($_.Exception.Message)"
+        Write-Log "Error generating Markdown table for $($ItemName): $($_.Exception.Message)" -Level ERROR
+        Write-Log "Error details: $($_ | Get-ExceptionDetails -AsText)"
         return ""
     }
 }
 
-
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBbfKqfIMAXMagE
-# P+X8Jbi+GaNteyCIF0mstt8jSGMlPaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCA2CF79aJM59u5J
+# zu2gguaf4ppjLtyI6g+pwKofIhLXcKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -338,31 +357,31 @@ function New-DynamicMarkdownTable {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCBSHArxlGnMpe2q4Gjj/BnbFMxpTHKhU0mkJ6AL4iWc
-# HzANBgkqhkiG9w0BAQEFAASCAYC3BJMv2HuJzrIFRCWKvqI3Y0R8Y6FSjvOZ+3Ee
-# PhAyrvasWJwr4PZZTVTtlqrCRqsAUN7za1Fgd+q0z3ltH04KmwVNVKnZb1hOZ8ka
-# M8LBMhf3lGgCNVEIShMFwjWR+nj+wtjtDCp82GbSG2qYUqnQ6Ee4bYdnF+oEfXJc
-# QupBJDrz5KB2XKhTQf5Sxh5fVgHznbGNkR7p1zWbOoMOvfaiHd4eNBgWP7oMj2bg
-# e7ybwxiZKHbvow1L6AjT875TkcS87VVc9lisT77tGYFsgWIYcx6XobtOPkLZ3wIc
-# AA0tRK3G2Mqg2BSNtQAgInlNhC/bICxFBW552LVC4wqhOAGvWY2j7tIaUXCg0b0W
-# /wpJXscw/GKy6AK6zV3ZMucIeAL5P+rXl/m/mp8cu4DQkTQZA6yvt840WucI+Bwz
-# C6DmxT0PQt+xdJbmUHdrZDXgT9stuPqJb+TxEjNBQ7MOTNta3mKweDMhlaY3y5sR
-# XzfyStRST/2PejdB3SYiKIdAP3ehggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCAb7oWBaCNjoL5G9HSwogMDWWje3z/6EzVK0dK8UyKL
+# +jANBgkqhkiG9w0BAQEFAASCAYBOMp0SSWnb3SCp31mAJCxOa0jnUkZJ0Mc2mh/F
+# 0ekzS2rwuGFE0XqxJ4tqATVfC0DJ0CQV16Q+dkWDHjBn6PLWy7o0xJCnjJOVm7eQ
+# ezbaXSzcWxlZphvvFwNbdEYOdiwrH34wwI7GmKhbCT2rhORpyWLIKmnpltHcajB8
+# WhrQrLmzuikFROhqTg+Fd8Z9fqxDrfXYJjR499zZQkbHTjjcUjZWX8dNucw7WDkJ
+# 804cgDyTTke4NRyqUaL7CcwZ5P+lgWor3P2eMMty2TyqNhYtJMTEpgB4KP+PJ9w5
+# 0W33BsU7qKX2yWrX7UueloMw8iAmxHOzjqf3Ak+wqAfaJS+VufPd5g57iUR9/pt/
+# 5H/rO6qPmXUSn0uRQlkBvK/Rw7aNgLPVacgLQfOYmoU0PckBoRmGKmURjccqvdF7
+# 55GiRwtJp+BXhWshQwgurnaWldrmmf7XBX315b4ns4ARm6QSNyLlm2/l+f3q0wHL
+# Sw3x9Xbv2Nt01ssvIIrwcYtMiIShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjE0NDRaMD8GCSqGSIb3
-# DQEJBDEyBDAaCw9uYkoRVGJ3q/YzM/CgiDPPbJYVGxhX1UZgy2aGlJ+Lvj1Z/0kp
-# iLwBkKDtcq8wDQYJKoZIhvcNAQEBBQAEggIAC0X7cszyRTxFoQaciIjnOPn0QL68
-# 4ARWBz5ghIJyfSRUEcpiemQ9eSiVv5ZUCo0fkgDNlv9VKecEiHMxnQw7PAlJyeQx
-# /R2edGmTY2FGYwpEJXcYbCTSgM9aoYqyU/L+W83Y/ZoK8JlSutUIsjN6hdtxK9YW
-# Vnnqm/Bx3STc7e0ri7U3o0PGtTSwOH+z2IJMyUYAhpkI10MhBbEa2OcLxQIcHKiM
-# KEbL6J75AaTxkm40FCWEvbxGNTqJJZbRuI/Vyx9cFNrfr2jxjXXSKBwqFwW/9ydC
-# Xr7t4QdzlW+yV3OpRRxLZAlS4Uwtt9ffMRyxoEKSptIOIqxI/Pv2DwnWoMFLoI2l
-# wcAHRqmkLY+nODqBBrDckNYfIxiT+oS0gOQyxdrsYGxrmmTxjADoLCVjRf13czDw
-# si++EvZic4oW6UY1LHPopB3S+itmkBZw4jLO7Pd0zBsJZjg4mc80J+UlTIHYJPGH
-# UbZGhUUgE5Nb9o6S501riOFmDUNWV1GjNik5LyWIuUSpt+i+ZiUAjqg2hBG3eO84
-# rXi4534W7wT/d50h+O2xAw8F8dAjjejgSzev/ZackxKtAcC+OqIRDNkIn20Ooj3n
-# 1sdSKmUbKk+Wwre0gbg8Sh0qbYuCSM4IrkucTHUbetVnW2AwPoPaCwhPSIcRVw+U
-# k5QLBu4Sj2u4ep4=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAyMTA4NDRaMD8GCSqGSIb3
+# DQEJBDEyBDAhtF0WnwykvhecJGavPHXzE7gLygAQyRt7YNWyXaiAiEYi611YK4/D
+# cuqOctWybpAwDQYJKoZIhvcNAQEBBQAEggIAXfCwHyXYpqkbe+u123ahMSJIcuZ6
+# gHg96Upi6LVHixTxTZxm3siiHcyz3I8IvCBEEE6eIQFFh0E13XkqZqj8XGdfYMw3
+# RUiFKjQ7HYF1WSKG9xjqcBMGFKf3jSEfx0dCx3tSAAWl0WDt/lSfwdRMgz8NrmL5
+# lyPAMCd5bJF7oedLvWw7KQKMAQZ3L5orvepkmg5qLi20ewOsfQQrKmCaaywV2gDn
+# qMLZK/+KRy+54Xxmr9EjVN7e1RzfWymg0Y+keMgCkok3nDPrWfE0bcZY7LZcwlFh
+# SegxG0bkf2/Hs71SZH/ZWV5rR0gMoZAlkEX7eEAW3bCf72oZxWmG43omLM/Rdgwg
+# N3dFcGxzveXlGK6Hb0k16BYrjfrz8xbW9gEJ4mCGWkUJNTwq2uwg6hqZt58ShAW2
+# op4xueEKrjp6FdEJOf6J9+4RxxTbtl8PhsAZw80GgDecvfZmX20TVydMCRxa2yUu
+# /u+xjPZqylGi322UciOZcfEoz+mZwCDJxURu3ZkOfkYSY0bcm37Zm62h64XhGr2B
+# MXmrh8veHEhY4nSIJZZO3CMB5fn/nu2BpOu6RNu8n5J2QhnasR1SJcPE8C60AVMa
+# ycqAdf7ZZs57gSjivIDlrcHyGqyrcAFd6Qi7PX//htNYtJD2+gILMdxfYeoHfVhx
+# NhxxxUraQRbfA+w=
 # SIG # End signature block

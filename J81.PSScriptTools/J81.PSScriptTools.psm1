@@ -1,3 +1,19 @@
+# Ensure proper UTF-8 encoding for PowerShell 5.1
+if ($PSVersionTable.PSVersion.Major -eq 5) {
+    try {
+        # Set console and output encoding to UTF-8 for proper Unicode character handling
+        # This is critical for preventing emoji corruption in PowerShell 5.1
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        $Global:OutputEncoding = [System.Text.Encoding]::UTF8
+
+        # Also set the current session's output encoding
+        $OutputEncoding = [System.Text.Encoding]::UTF8
+    } catch {
+        # Silently continue if encoding setting fails
+        Write-Verbose "Warning: Could not set UTF-8 encoding for PowerShell 5.1"
+    }
+}
+
 # Define paths to public and private functions in a more robust way
 $PublicPath = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
 $PrivatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
@@ -29,8 +45,8 @@ $script:LogFile = $null
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBmNo7c1TYzp4IM
-# GtD6c/EyMpzeo6UV5Ke5AbQ+z98ah6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDuRy4GR1QM1n3R
+# yvLeA7FmvoYDztdnvb+FaZ1LjIGxlqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -206,31 +222,31 @@ $script:LogFile = $null
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCALwK2z8P5qxAQ+JjXmppzKXcSlZoWSQb1OqM0biiho
-# EjANBgkqhkiG9w0BAQEFAASCAYBtbv4TZJl9BAk936VUZAx0u57cKo2ymVNWV9Tn
-# dhrjdmqK34RifW3Ja+JcdgsCkKgEW9tPzT89gb5kfOaCZGD9hFfgP5FvhZjC8Li6
-# LQXg9313mJzVUd3QZ3JWankbTTvhGvE1GfJb0XXeaohvmsj+UjUrsz6fr9SfZdWe
-# a+esO6FdxHvLTKwwqcYjps6/0SgyAC0hyz5tkarCENkSiZqtunV0hfCcwM6v7pHS
-# HnVtJrlYmGB+LaPm+EZsbDTs4KNnWlWyAYmnTv4WVDT/mCBqMVEeoba6c6DZZW92
-# YoKriww8bRyvI1NQ5lQ1u+7T8L1sA0znjIPbXQrImdGts4ZciGoY80wpBhq3Hz77
-# qmODG/Q3o69TaEbm4t2MOEiHITqnUSq9Zi2zUHFHrHrVF2Ri8/RXENywvNmehy9L
-# IBvRFwrIe79FuWZNdydVwnbIDxBwn+/hxNcECGjJ5cSx7+L6KAvlZXAKft+D28hM
-# P5jlCFWRw7bapdEP5ja+RcbgSDWhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCx4gqQNEXQSRxYAYM+9kXYC6Qev9uJTmhYlofEdBb/
+# zzANBgkqhkiG9w0BAQEFAASCAYBubpxwST4KPLH2+xYEwUbvqMwviqbX6ZL7iF+t
+# zFi/gTY7evvK1v7KcVI8btWbNyn3xE/tNu1HcD3JKQGCN2iX2xHm/2Et1WSqmbNX
+# S4co4andlb1Gk8oCs9Fh2W8edg/IwHceFpvgcSfoonHRvOsZkXXSWdW1iWGGt6we
+# gaocRP3YTuJTWYGArwuX05d3QEcNg7qdHdX3UriojtKxEOJgQia+dTA8As7oEvxl
+# o0Q9IePhOq0KhwpP+9MAhWHiTpUXE1YFQZ5f8eBPmAHfD0KvS6T7nglS53mtDewi
+# rzpAVfwfg4vvemgArDnHvArSNlBvlHmj/Pbm3WW7Gm4QZymmW2Kkxl3RhXv9Zx4I
+# nu3hbPXD/Ady5WG3X6Is7dLPj1RlSoqF/3l/uO7QIz3XrpfYvl/PLva9C79WeYhb
+# /YQMCDEz1jaXygK+g1H6QJDNRB3liIxlq2aDXAmiK9dy90+4NS6m2BGkT3aWQyQ0
+# XZDnJN8TtxR0iRZXmSO8dNfonN+hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjE1NDdaMD8GCSqGSIb3
-# DQEJBDEyBDBgTzuRHy2qGR8NKzQ8omSwJiL4sl/UYLeZm845SMTDaOPAL8aY212e
-# aMNNxXNBR58wDQYJKoZIhvcNAQEBBQAEggIAvi1fvPTAKzFFD9qBTUhm1uGmLW1a
-# PjWn3plQqgx27x7U/DBZ/Tb3aYqtFKzxWd8ZwHvrNUEprlyDgh4RkcEG/VApCaF5
-# zLZL8XLxspdnIDXAxAF2BrQLdwu10T6DmJltHbmM1DJErVynzwoZcsUQSwek9Qh+
-# yrdPXTrW7vqgWe0K29x2TpAIPZqbVpW9j0V5/a5Bq+cRMdi0yop/CeV2IWfu2l3l
-# lQng0Zbqw0eDCAjcnuma/o0Qhj/FYCq+lpk8v4MsjzrkY7yUex/WfFQnLZWDDQsp
-# BAwrWtEpgPsyluoVtlIw8m1remLiSujP4fDpH1dlhqBt/4lYIkOSp7Q5PbSrB+Ji
-# EYMyR10+uKFgdqMbLF32GSHH/G7uZWBwYRihU2G5GgAYiosVJwhjsVCTmd80ZEdy
-# 2JHwf3zwfb7LXCXTDHfKPVylTa+BQ9r/ovvmk+v41/rX4hzFooSfBj9ijmA2noLz
-# d6AKi/Gp568hisO466wX0MSBNdqph5AggQjb+yZB0AIrGU9i/zdGRwZxkzos8JTw
-# /XbuEgTrLtNvR32g0BjQdgaNnnwUR5HslxO+eYXQ5TyWYUCdIjS1sU2bRVfjLtv+
-# 6pLGVpgxai85TQOzv93z8EJnvJE+N6LXRxmuIa3MB/6sybrl18EvVxHj7v/XSDDB
-# i8NZYCpVff7I4rY=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAyMjEwNTNaMD8GCSqGSIb3
+# DQEJBDEyBDDEP7hPGDb22HFhpURRZXK6uTFsmntWlRlrzku3JXhBsxqw68oaPnWI
+# qb8D9MmLuygwDQYJKoZIhvcNAQEBBQAEggIARuQV5PHiqFb4Kcy+iC4JNDcSXDNc
+# ZOFSUsu852bHtyJZ0YdpnPubPVH+eeS5i6K7jNPYsNdf4RVd7E7XiVsCJ2auBuQC
+# zOVEvNyNRyKBimkTZLMgmg0ya2GYsUU5bWNrZ7PPQnLaUqQCQI0dLXlzzvbhlZKA
+# tBNbW3g/J70flNADUt7WM8wLxD6VjnsJr58y7TcudpEEbU2VJHw+4YDnVtblw0nO
+# iCV1Fk7MsQGi4mQaSjDifJAos288dmVo6474uE26oUujC8eE+4tGBsUqaMVte2I1
+# IQ8ly6weKguLQBM5UNF82+13aoGyoEwmSvhMtTDkbS6wxPPw8m9e7p8IdxMM+k8b
+# /b4jMobol7eEN19uLjzX6jXyu4asblXilxV9mxH1W7tNfB7360NqNPtWeZKa9IEQ
+# MH+qVJSAN8vHpQ1EJ1z3ui+1tkGSouaoBxXapa+2ZBMwKqjNVOJHIUocflRmCTCv
+# 2Bih32ZT6VJrzZFwBubgJoztcFynp/O6MM9n0AoDm+BS60Cd6TtBLFTgYNdSB4JH
+# g1AxnNIwb7dGVirHobcObhZP5kXcbjhJlORkZ4e65n6AbqUJeFvAliEVrokdNluV
+# ywBM40A9Cbjo9+DyWZk+UgXzGypQ+WxkrtYrWnAhacT6Q8f+QBUS4gGTrpvtHPvd
+# ZaluJcJ/HpSOTwg=
 # SIG # End signature block

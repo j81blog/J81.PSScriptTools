@@ -24,7 +24,7 @@ function Save-Inventory {
         # Load existing JSON if it exists
         if (Test-Path $InventoryFilePath) {
             Write-Log "Loading existing JSON file..."
-            $inventoryContent = Get-Content $InventoryFilePath -Raw | ConvertFrom-Json
+            $inventoryContent = Get-Content $InventoryFilePath -Raw -Encoding UTF8 | ConvertFrom-Json
 
             # Convert PSCustomObject to Hashtable for easier manipulation
             $inventoryData = $inventoryContent | ConvertTo-Hashtable
@@ -63,8 +63,24 @@ function Save-Inventory {
             }
             $inventoryData["AvailableItems"] = @($inventoryData["AvailableItems"] | Select-Object -Unique)
         }
-        # Convert to JSON and save
-        $inventoryData | ConvertTo-Json -Depth 10 | Set-Content -Path $InventoryFilePath -Encoding UTF8
+        # Convert to JSON and save with proper UTF-8 encoding
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            $inventoryData | ConvertTo-Json -Depth 10 | Set-Content -Path $InventoryFilePath -Encoding utf8NoBOM
+        } else {
+            # PowerShell 5.1 - Use StreamWriter for more reliable UTF-8 without BOM
+            $jsonContent = $inventoryData | ConvertTo-Json -Depth 10
+            try {
+                $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+                $streamWriter = [System.IO.StreamWriter]::new($InventoryFilePath, $false, $utf8NoBom)
+                $streamWriter.Write($jsonContent)
+                $streamWriter.Close()
+            } catch {
+                # Fallback to File.WriteAllText if StreamWriter fails
+                [System.IO.File]::WriteAllText($InventoryFilePath, $jsonContent, [System.Text.UTF8Encoding]::new($false))
+            } finally {
+                if ($streamWriter) { $streamWriter.Dispose() }
+            }
+        }
         Write-Log "SystemInventory.json updated successfully at: $InventoryFilePath"
     } catch {
         $errorDetails = Get-ExceptionDetails -ErrorRecord $_ -AsText
@@ -78,8 +94,8 @@ function Save-Inventory {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDWheO1KeLyQD3H
-# T8jjLE3Lv/ikAGsFOtxySKcj/ZLFwqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAaPcOEjrabAfaD
+# PHyShZBen9TnBJK91eCAzR/hDOKHCKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -255,31 +271,31 @@ function Save-Inventory {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCA/5iiRU7uwY/O0lw8uDd6qAlb7/tK4lPeR+p5o9J5B
-# BzANBgkqhkiG9w0BAQEFAASCAYCEsgXSc5GuX5muyv56jufRNVf5RCsTc92OGH2a
-# CbGO2iWsTt4xu+2WlqUCUphW8ENx7ryLjkVbGcaeuzhKYzgZOiEp9/laYeUQ8owd
-# Btnbh1IdGnWprmfLrGC13ib0lDLQFYmxJgqwexY+FJBlsUo53zWhDSHdHPmz2Dnl
-# Lke8TYj7fFwgNdCXCl1WWy5cZPQYydcYPBYdwFT+ZDQfwyPgyhzvCdaXcqWI+0VG
-# apSenOlVY03/Ewxkq5BNOFCL+xMUq6nd+5YH69dU48L+q1LuP8qgatXOTP6XAMJN
-# wcpEe41lvCE9JpHs7jpYQBfegoa61dFmZ18NMDeRjoCMYQDIyIbzoV9iZnB2s0Mw
-# +ebizUF/FCZ7aNdN9h4Ut/JrvBgTTgEx/vwAq4GC4gj3+FwPqnKPY2WnwRVnRX5P
-# mm9nwUnqG/1spO0JWHdsgGAqg59D/IOnq5fJrIf2wwqHrpUwhZCpTtYP+lS5SKdd
-# BYs0SGPktZBv1gA/bTYp2NrHQcahggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCA+U3ouc1qT67jmxkPh/VzAC9kdWcKgbF3rp2J/hwjr
+# YDANBgkqhkiG9w0BAQEFAASCAYCXbtRit8XpKCPjlpxvyhy2oeuxZCBJUF4UBRP+
+# Un1ITX0SCmmiI7xDj5ELhsXT+9NwmQS8rDaxrPRJHsx7Y4EKivfD1vY46Xd/AQCj
+# PH9fI/Rig7p3aReFHudR/2HcynmXSYScCD4VIUPPzOHPJ5Q0ZMxlEY0ge2rYwpq+
+# IZwXh8lmN/2TaSVX7JEnLi/gKzcY8oeus/LLdqq5IOIVqoPEL69Mq7Ohe3ayqCn9
+# XbcRZq5KvoQeDT49EqVDmzzPYHFE3DJx12ALelLh/UI8ta4FYq2Wq2OB9dFGO3Kh
+# YHVmgLWvdPzPqo6k51jsK+uE1z3ElvxUmADdOTkbkCmRpE2BiiXbSb4V/1qBNk2W
+# ywqt3GpS6LutBCSmT4PDJDG7BYKCQvS0+uk73v5t+XS7jIK5u4/HLEqW0qZO3tLJ
+# +TGoCZ+mxd+9yD4Xb279AYjSgVw2dqw1UGlAFkmy8zKS0BvklrZMtx8mqLXBwPjD
+# /8ZhD1Y9Ys1pCnW6gQDxlhJ6PkyhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjI0MTRaMD8GCSqGSIb3
-# DQEJBDEyBDBVDpz4AnnuZo1ikM0wE9Co6eySwIRCJfsgYndHwWcUbnWVWDFmFcd6
-# JWjTjZG0MwwwDQYJKoZIhvcNAQEBBQAEggIAmc3cwMHr9Mn1Ci/KQMn9KSDP2b3d
-# 1QiLq6c/VtPDUky1VJv2SZLvhh8ysExwGKOPIcMeSOFPd6Mkw9m/jBAk+MTXjC5W
-# WY/6RmAkKagn+VkoQLBDOKWI9kCkvWOaMoOEt5KBI2oLVD3nmzMl/AzapK4cfo78
-# c7bqKHsZWYOBQR5ElVczu6p+Bp05F4OpwkmPqcNAtNlddD+Q8LyDNMClpGOMKHkI
-# 4DVKDmB7tCdALZOZ7mBXWNABdIW5jQdHwS0H584wFVmT1z28MZ+DOPeL/Zajb3Em
-# RVC4HcEjeAecXW7XeTNAjdO0LV2EWOsZGsGNXHtqbSp68zZyiWZjraNwlyKveHk1
-# FM/01KLzhExZZX1cmU66cM60D9eNIN/+Kqizllap6RX1PLaQZfnDFgOTmDT3hust
-# Vl/gjaKJtmZLilMP0b9N9kwJh0Wrn9CGcEeW6jFbmrxCcbFJtUjQGkVoid0g3Ru/
-# P6rrh6HHuPo7dkNXjhsQQv8dKvyDlQdbTijSjvWuTBCbb1fhI4zzIv1/CJlRFati
-# wta7rhalyQOUJTdDG0zkQwTam2qx09J1O8/4Lacyhqseidg/4CZHcZjIQllQmi1J
-# 4YnBguzOw39OdClf10Ub+hVvWA2OxmKRsJKAU8fn2kGmBVY0bKIgPb2XvjVRV8OX
-# 1NchtxGjmW+4UWo=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAyMjEwMzFaMD8GCSqGSIb3
+# DQEJBDEyBDApA3Zu34rTfXTUFxsd4lL+hGsCIcKXl6zAhldhjb0i9dVIcasbQVm7
+# 4HUcLje8gwEwDQYJKoZIhvcNAQEBBQAEggIAW588CePj5j6SBJBrPRBt/1BFwETJ
+# 2YdZkkz/kaxeESG1mtxVqqEqAkYjphLee4x318WbjzK8PX7RuPNuYrwehHd2bWIQ
+# 4Cos/qbNjQoCV0Ry38SJMh6VvSaBmgPf+FnEpfSKdH+pyMURO6BHiceQrAAfvLw8
+# Dz1C+CnoF1Axx32F740lMmPTnt4aePZhGUmS/bcMm9Phptl7sOuyZfsz2rJO1h8V
+# Xo9CkScW2+rSHXN2Qy1oZVunx03ZaBT7gCq/K8eHeV4nXHUavoVo2SX5KecSxPHS
+# 1Ag1+DHZer5xrjNmgkdntNb09q05xtqRx9Un27OzDgaECeCh1LBjQUiSkFU5DXCJ
+# MztCo7RHhy+O+OrYv8JUU1r7Lmpoa9FnTzfOLFgSq6KrN9XqqMXLfWr5U/OtS1tb
+# Qx00Dqc1gBpsIHfzC8viZLQre4IorN0R3smb0lyTGpdGtHw5gkDGUyMgdWUCdXE5
+# e5M3tlYmv0KhI9xMayAwja5an/dg21O8pTHcDKnlMtyjTNTj2jGzcrtyRDWK9AlA
+# sIOXT8cOwJgr8siFLJTjB0pOc4nes3RhWNr+8zll1cv67xh4IROabIj7ikiVr6Du
+# ReKsnyZlyfcqyjK6qNMeQCJ2jAWZNIYDweb10EMLQPfkDBwPlSEvbe4DtxRh9W7q
+# LUtXzo+zscnfQDw=
 # SIG # End signature block

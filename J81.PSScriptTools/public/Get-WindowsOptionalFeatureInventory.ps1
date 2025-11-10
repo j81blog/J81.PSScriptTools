@@ -1,55 +1,120 @@
 function Get-WindowsOptionalFeatureInventory {
+    <#
+    .SYNOPSIS
+    Retrieves Windows optional feature inventory and saves it to the system inventory file
+
+    .DESCRIPTION
+    This function collects information about all Windows optional features installed on the system,
+    including their current state (Enabled, Disabled, DisabledWithPayloadRemoved). The data is
+    formatted and saved to the specified inventory file for use in system reports.
+
+    .OUTPUTS
+    [System.Void]
+    This function does not return objects but saves inventory data to the specified file
+
+    .PARAMETER InventoryFilePath
+    The path to the system inventory JSON file where the optional feature data will be stored.
+    Default: "C:\ProgramData\SystemInventory\SystemInventory.json"
+
+    .EXAMPLE
+    PS C:\> Get-WindowsOptionalFeatureInventory
+    Collects Windows optional feature information and saves it to the default inventory file
+
+    .EXAMPLE
+    PS C:\> Get-WindowsOptionalFeatureInventory -InventoryFilePath "C:\Custom\Path\Inventory.json"
+    Collects Windows optional feature information and saves it to a custom inventory file location
+
+    .NOTES
+    Function  : Get-WindowsOptionalFeatureInventory
+    Author    : John Billekens
+    CoAuthor  : GitHub Copilot
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
+    #>
     [CmdletBinding()]
+    [OutputType([System.Void])]
     param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
         [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
     )
-    $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
-    try {
-        # ===== Retrieve Windows capabilities =====
-        Write-Log "Retrieving Windows capabilities"
-        $inventoryResults = @(Get-WindowsOptionalFeatureOverview | ConvertTo-Hashtable)
 
-        # ===== Save Inventory =====
-        Write-Log "Saving SystemInventory..."
+    begin {
+        Write-Verbose "Starting $($MyInvocation.MyCommand)"
+        $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
+    }
 
-        $inventoryData = @{}
-        # Add or update Windows Optional Features section
-        $Item = "WindowsOptionalFeatures"
-        Write-Log "Saving $Item..."
-        $inventoryData[$Item] = $inventoryResults
-        $inventoryData["$($Item)Report"] = @{
-            Order       = 5
-            Title       = "Configured Windows Optional Features"
-            Fields      = [Ordered]@{
-                FriendlyName = "Name"
-                State        = "State"
+    process {
+        try {
+            # ===== Retrieve Windows optional features =====
+            Write-Log "Retrieving Windows optional features"
+            $inventoryResults = @(Get-WindowsOptionalFeatureOverview | ConvertTo-Hashtable)
+
+            # ===== Save Inventory =====
+            Write-Log "Saving SystemInventory..."
+
+            $inventoryData = @{}
+            # Add or update Windows Optional Features section
+            $Item = "WindowsOptionalFeatures"
+            Write-Log "Saving $Item..."
+            $inventoryData[$Item] = $inventoryResults
+            $inventoryData["$($Item)Report"] = @{
+                Order      = 5
+                Title      = "Configured Windows Optional Features"
+                Fields     = [Ordered]@{
+                    FriendlyName = "Name"
+                    State        = "State"
+                }
+                SortBy     = @("State", "FriendlyName")
+                SortOrder  = @("Descending", "Ascending")
+                Highlight  = [Ordered]@{
+                    State = "Enabled"
+                }
+                Format     = @{
+                    State = @{
+                        Enabled                    = @{
+                            color = "lightgreen"
+                        }
+                        Disabled                   = @{
+                            color = "lightblue"
+                        }
+                        DisabledWithPayloadRemoved = @{
+                            color = "lightblue"
+                        }
+                    }
+                }
+                Searchable = $true
             }
-            SortBy      = @("State", "FriendlyName")
-            SortOrder   = @("Descending", "Ascending")
-            Highlight   = [Ordered]@{
-                State = "Enabled"
-            }
-            Searchable  = $true
+            $inventoryData["$($Item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+
+            Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
+
+            Write-Log "System information collection completed successfully"
+
+        } catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Error "Item not found: $($_.Exception.Message)"
+            throw
+        } catch {
+            Write-Error "An error occurred during Windows optional feature inventory collection: $($_.Exception.Message)"
+            Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
+            Write-Log "Important Error details:"
+            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+            throw
+        } finally {
+            $Script:LogFile = $null
         }
-        $inventoryData["$($Item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+    }
 
-        Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
-
-        Write-Log "System information collection completed successfully"
-    } catch {
-        Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
-        Write-Log "Important Error details:"
-        Write-Log "$($_ | Get-ExceptionDetails -AsText)"
-    } finally {
-        $Script:LogFile = $null
+    end {
+        Write-Verbose "Completed $($MyInvocation.MyCommand)"
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCmmoMECNUAQfRS
-# ZWC0sUt8LKjwom6fq9yH+xNKzFyw5qCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBcDF2l1GNAm+o+
+# +GyhtBHNP5GmhsHqQahldwfYtMBvJqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -225,31 +290,31 @@ function Get-WindowsOptionalFeatureInventory {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCD3hyvosvuVjxd6df9ghp02+88jsfNiXo3VF5tSF9gJ
-# hzANBgkqhkiG9w0BAQEFAASCAYCfyCW65W7RSdizhk+SLfFstPnrR5c0SyGcdmcP
-# 8UjatQ9VAR8fE1IUNC47NE+N71OnPT41yHUw5blLDTYspa3obdIyntHXFRD0bx7U
-# wyrte6sfcbkEHkxs7hSNLIg44nw0QGtrUhHT7edOkYcYXuQ4VEzBEcpkMjfrkshn
-# 0rNR/70vZQX2bBPIjwzQfte0zmUMuAkKV2CN3Q8BIVayihacC5Pdo63ICoTB5h+B
-# m0lIKvsBl9ehI5P77BUqU/eVhJziUtOw1CfNfW9ZuJk6aZRJ58RfvIhRKGphgPm/
-# L0XHBkthvfsehpYzY3VCnsG5hCgHKyru66I/SVWz8A+cHkGDTxy2vib1fI8Csnsp
-# 23tPKV1EFcsARzJLvoR1wBr8nyGnSebP5m/IvmrhKAm4yjUCWVZkxjG2UY2ey1g1
-# RgTnADb1Up5uwq54LGXbOGvRTYc/NDRa6CPURxnbNP67+NpENqZKV6rCINEofHqP
-# 45Vx7qWR4I7DeJxha8XeiwED8uyhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCTvCE5cmya9hlrhmlCtEoKJ/v1Jz+bMOMyOsEnPZpj
+# WzANBgkqhkiG9w0BAQEFAASCAYBmuW5ZUDZKkYlWZCXrK1Hzpf0d9uOqzKFMpKTC
+# Mv9aFvdECTMuM4qGf5noYlHYlHqU1YILrbkxJNyy5FDzXkgV0ohV1qX1j+YCdq4s
+# TWvgPCarJ0Gpd7eJ0kFj+NAN7kAzThaJaByZ7P4obx4x/ptyqY/1TkccC9Ou7dxM
+# KJQzXQ/A6V+8BLuFEedO7js49DxwAj8TVLDHZA/2iqxQZcXLIn+xs1i6nroxOQnM
+# Qccy/FZKFp07tdZNb7Hn5Oqidy6zHaJBLGmtPGh8EKy3LVOYnIAj3rA3KwEXVvYu
+# MZx15cxZo7gkrCJTIGjEDyZQOCDyOl0VJeq1640QA0YeA4JJYWusM0eLx2d/1m5F
+# DMFSKSqZOkuF9fgZjuxMW1NGRRZ+mIjBDYMofavRT2ReCWBkWkh6tafdokb0HOlX
+# f84SHnGWNZL4AXRzpRGD9RFBmdLkzpnu3hYH3t/6pnaMsZNpc4VQtE3R+CReckfV
+# iBX/9y5v64frI1oN3n0AWiiJ3kKhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjE1MjNaMD8GCSqGSIb3
-# DQEJBDEyBDBi33cwoAH0Gg1c9Thzp71CxBXjFkBuDcW4nyPkrctd30mxcc6giuUq
-# obohHTTHA60wDQYJKoZIhvcNAQEBBQAEggIAtmH9YfMOthenhw3zENux4I+g6K/9
-# 2lphVBzv4lpIJC5SuLDnkBGsOQig8UK+ewtw/vsSDoIrBRFxCI5oPAiSUF0lyxEO
-# oHRmmw9XR4XJzrIDJNDDn4NOUfzdgQ+IcdyuIy4IrVQo5QWDq6Yndgh0Iw0AQUT7
-# 0kqGZxc5njRxSM6likT9fXrsnKRHk7BIcEQr5UHPRuRtYpVYaFwTu/RO+PoCUorr
-# qH9w/cLFj29ME/8AyA6y/XwF/QC+O1CT38VHq1Js8cX6VnIhuxXTEl2grqGwYpvN
-# YVVJA+VTzPu6xS5DVoYnmeT/oQMaqgojg2zSa9jlcnYiTv330ItkSyMf0u4rr4TF
-# xzbwlyPW6gM4Vy9cL1y4oQdocI+RPb59jJbAAQfOZ+DoLl1ay18DIXyVxvoUU5p+
-# Wn3kvTbxl6czJoqrjEiqIYCSMd4iKSAz5MMGHz56vd3qgYQjCSUDuoF7JGEP5uOu
-# q2R6LM7hlZe8CvfrKp9TF3k80QcockzdAXhVPCfuEAIWfrly+QNO65uZDk1GKv5X
-# 8CtpF1pUTqk9f0maLwez0gGHL1xsNscdCadvp9Tu4khWITXHQfhK3/CG61MT2z/G
-# l/XnTDpnC6cUbFvXIwI9KnT0mNr5t336hDimfd7G4iquxE/GuOgqHRbC86tU5ukX
-# aY6vnkkNXud4img=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAyMjEwMzdaMD8GCSqGSIb3
+# DQEJBDEyBDCLSyUSvY6Jke+9pVfO8GaLK/srjbaTMYImwX+A7lfAQUeAdQR4y6v3
+# vlw4galUwyIwDQYJKoZIhvcNAQEBBQAEggIAokFUClJVYfJAkPyjncIHIjDsxQKn
+# v98Xxqt7S2LtGENryjDlAngcuU24GGkGrIBmOnozd2TD4iPVzHM1cmtmFMzia40s
+# QCuPzNOw5vDP5nxOqhqKadhWYLHZZNdDkk24n3ZeQS39+hFrXqHO00C4rhPuBGG5
+# zeJYZldylKsd98QhAWp8pnFIZcBaFWjafs8aEL1IMEeqQCZ/XU0ofOXVzyo3QAUo
+# 4fgvXRsch3eQJAQ/cMehYRE6unlMTVIthYa0qGrx+Syd9chjIqBD4zu/2qYjNJHv
+# qW9w33k4nZ0lzUoXQB8Q81sYh7ZcDnE66v0wLx+ktqNVs3WOqcj0HKKbzWmThuF5
+# sf1BQcxo3oGm+kgDw3jvCvXZtpgnxjfNKftIl124vc6L6QcWs4TYb8/Y03V4KYHZ
+# PCEjYHYCOcfgoTDaAUQ3pJlobnk5agFXFSRwLUATPZQLQycWPgorfHqZfo07VoSs
+# 9gMooX5yBpDcAcGamicEHGSNpiYLt491feDWLn7CSI1aAAK1dnUx7B0gXBlY8xmK
+# mKx46U++ehDtYE8jgje45Sc5Bfa7ujg3SMA09JcyRPUM8Io/VJcSbw/kdvDxJIOZ
+# GjwedXJO9jx5oiJ3buhzka5AdQfrS39lJJxVJVK3Rh5no0T1KyCs2L2xYrC36OAY
+# rVgXtxyCcSDU2ck=
 # SIG # End signature block

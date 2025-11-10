@@ -1,58 +1,121 @@
 function Get-WindowsUpdateInventory {
+    <#
+    .SYNOPSIS
+    Retrieves Windows update history inventory and saves it to the system inventory file
+
+    .DESCRIPTION
+    This function collects information about all Windows updates installed on the system,
+    including their installation date, KB number, result status, and other details. The data
+    is formatted and saved to the specified inventory file for use in system reports with
+    proper color coding for update status (succeeded/failed).
+
+    .OUTPUTS
+    [System.Void]
+    This function does not return objects but saves inventory data to the specified file
+
+    .PARAMETER InventoryFilePath
+    The path to the system inventory JSON file where the Windows update data will be stored.
+    Default: "C:\ProgramData\SystemInventory\SystemInventory.json"
+
+    .EXAMPLE
+    PS C:\> Get-WindowsUpdateInventory
+    Collects Windows update history information and saves it to the default inventory file
+
+    .EXAMPLE
+    PS C:\> Get-WindowsUpdateInventory -InventoryFilePath "C:\Custom\Path\Inventory.json"
+    Collects Windows update history information and saves it to a custom inventory file location
+
+    .NOTES
+    Function  : Get-WindowsUpdateInventory
+    Author    : John Billekens
+    CoAuthor  : GitHub Copilot
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
+    #>
     [CmdletBinding()]
+    [OutputType([System.Void])]
     param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
         [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
     )
-    $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
-    try {
-        # ===== Retrieve Windows Updates =====
-        Write-Log "Retrieving Windows updates"
-        $inventoryResults = @(Get-WindowsUpdateHistory | Sort-Object -Property Date, KB -Descending | Select-Object -Property @{ Name = "Date"; Expression = { $_.Date.ToString("yyyy-MM-dd HH:mm:ss") } }, KB, Result, Title, Product, Category, SupportUrl, RevisionNumber, Description)
 
-        # ===== Save Inventory =====
-        Write-Log "Saving SystemInventory..."
+    begin {
+        Write-Verbose "Starting $($MyInvocation.MyCommand)"
+        $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
+    }
 
-        $inventoryData = @{}
-        # Add or update WindowsUpdates section
-        $Item = "WindowsUpdates"
-        Write-Log "Saving $Item..."
-        $inventoryData[$Item] = $inventoryResults
-        $inventoryData["$($Item)Report"] = [Ordered]@{
-            ReportFields = [Ordered]@{
-                Date     = "Date"
-                KB       = "KB"
-                Result   = "Result"
-                Category = "Category"
-                Title    = "Title"
+    process {
+        try {
+            # ===== Retrieve Windows Updates =====
+            Write-Log "Retrieving Windows updates"
+            $inventoryResults = @(Get-WindowsUpdateHistory | Sort-Object -Property Date, KB -Descending | Select-Object -Property @{ Name = "Date"; Expression = { $_.Date.ToString("yyyy-MM-dd HH:mm:ss") } }, KB, Result, Title, Product, Category, SupportUrl, RevisionNumber, Description)
+
+            # ===== Save Inventory =====
+            Write-Log "Saving SystemInventory..."
+
+            $inventoryData = @{}
+            # Add or update WindowsUpdates section
+            $Item = "WindowsUpdates"
+            Write-Log "Saving $Item..."
+            $inventoryData[$Item] = $inventoryResults
+            $inventoryData["$($Item)Report"] = [Ordered]@{
+                Fields = [Ordered]@{
+                    Date     = "Date"
+                    KB       = "KB"
+                    Result   = "Result"
+                    Category = "Category"
+                    Title    = "Title"
+                }
+                Order        = 2
+                Title        = "Installed Windows Updates"
+                SortBy       = @("Date", "KB")
+                SortOrder    = @("Descending", "Descending")
+                Highlight    = @{
+                    Result = "Succeeded"
+                }
+                Format       = @{
+                    Result = @{
+                        Succeeded = @{
+                            color = "lightgreen"
+                        }
+                        Failed    = @{
+                            color = "lightcoral"
+                        }
+                    }
+                }
+                Searchable   = $true
             }
-            ReportOrder  = 2
-            ReportTitle  = "Installed Windows Updates"
-            SortBy       = @("Date", "KB")
-            SortOrder    = @("Descending", "Descending")
-            Highlight   = @{
-                Result = "Succeeded"
-            }
-            Searchable  = $true
+            $inventoryData["$($Item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+
+            Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
+
+            Write-Log "System information collection completed successfully"
+
+        } catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Error "Item not found: $($_.Exception.Message)"
+            throw
+        } catch {
+            Write-Error "An error occurred during Windows update inventory collection: $($_.Exception.Message)"
+            Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
+            Write-Log "Important Error details:"
+            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+            throw
+        } finally {
+            $Script:LogFile = $null
         }
-        $inventoryData["$($Item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+    }
 
-        Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
-
-        Write-Log "System information collection completed successfully"
-    } catch {
-        Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
-        Write-Log "Important Error details:"
-        Write-Log "$($_ | Get-ExceptionDetails -AsText)"
-    } finally {
-        $Script:LogFile = $null
+    end {
+        Write-Verbose "Completed $($MyInvocation.MyCommand)"
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBrVOWeaOZl4aGO
-# JeA5zPpsHaB3gwaeePG6pSgy/Qu+3KCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCMsiUf74HD0Iw/
+# 1ntMUPDwC6j40QqhT1RuzlZ3ajJ4+6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -228,31 +291,31 @@ function Get-WindowsUpdateInventory {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCCGy8t+ldAmSdSr4pLx6av9vRGaoWAAfW9Kvx0UEnfo
-# VjANBgkqhkiG9w0BAQEFAASCAYBVxza3ePCtjDNcLTM5j9WRBbZIE552q9PgJcC5
-# XZwHYS68kMJW7YvuLmQGz2AS9POmGs+/IraLr2OTJIsOX0DgoX8mFb7TzprqAuHW
-# L85B+aK8TCUjU4LuZpliuNueXUf4NYtdb1XHy3NMLOmJYlTMj9wWtuXLYM7aLMkS
-# XHUXDBRFJuaB4h0AswmH/tkwwACD5Q1OTx5P0ugPxWdl+7WzXr/BaY5i/Baj50CM
-# f+chSnVeZfd/zBhhHAJ6xN99aW9nTGwax9HtKrpXhUMI83w95aAvMNKPri3KG476
-# Qe3pWqaip7VPv/aRz8MusQkYtIICYFzwYZLC4pdlj+qYpk2jp1eaxHycecVSmEtP
-# 2v9KM+sXh/lrqXjKZipOw0hF2tw1Zqay5tD0/S3BDY3q8DyKRrSpkD5O96QKi73Q
-# jvWMtkQmZwPDxNQTjdNghmZ6lEHmCaNPC1+PZ4hBCFsn6sZmuiUob5c+Foed3NNl
-# /SHXW8Y0oEfv0KIbvEeTvHnI7I+hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDEMBktmmVJVhjHM0j16N/keu4cVQg1xxKgniIfZaGl
+# djANBgkqhkiG9w0BAQEFAASCAYBBzQEHvKG8CWp7LNCogsqM9ZZf/5pIMZoZJcJv
+# T0W2iZW8PLi5/mFaYUAGkNa4l8cMMAB9V9XYJ0Mhg4Cc+xSo8tCXtyBnls0RrlaO
+# zMKSpfM356cEBdsT1HxsF9SbuB3dbnR7+/rLLfsYLwSEJUqArghXh/aWlB5GqhkE
+# h2jCJSPLiQUuIS+BZp4+0SC5CUw/MEzCvyPdWOsFZVJ8OsLi3JK9GAN7FfXWjCPv
+# lDPMbJeFyzMGMEp/pQ23hgRgXgKWIS66RbIKswLHq7hsJ1qd0RrTxruH8rVwquH9
+# HCWko+tV3RgvEe7H9KzUJV2rpHoOhzDyJtUGanzst97XfX7i6xaLmn8Xrg/yr6mt
+# HALq4CBkmsopUe0uYKOq2hgB10wVJROolrQ/D+PbSyXAH/REHG2lLKarhYaoPydX
+# eJJ3hgVkAOT2pf6eMtPlF7vLkshN+KNeXAh9HjDqDvngc1UtZ9sX4AQgRLcYyHBp
+# WnB6jG89DbdLek9JPmFdQ08iFCOhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjE1MzlaMD8GCSqGSIb3
-# DQEJBDEyBDD+WW25z1xphScNC5meMStrnTMqLdpzaXa+l6hy3NvUz+I7C7cd1Phc
-# z0dZsQd/6xgwDQYJKoZIhvcNAQEBBQAEggIAyys/4TVDjKgLKLyzv74DMR9P9zcU
-# SF16j1+e+yO+4JA0pNNHZQgaR3jjkYOwsfABgOJQlXsyxkkaUMVK0Fdi9gLYIZ+R
-# aegVFFDkAdeckfySEA/kSNWw2XjDYMY4dc/RTvVAfRcdk10JXf60mcOHXDgqB226
-# kcwBcrH75R5is5yrfMCSaynSZRUjqrI05C26djvq+Q5qn+MnenPxEC3hx8bMQqZR
-# GyTgQ7jc2HMiSMTgc3F9M6EQsJ0u3p8YOfinVNLPikiYeC0B+Scgpa9a2EOOlU85
-# c7MJPujHyEuySCIcFrtbK9G7ql82X5k0F+Gsxln1sc+VCVTfrYVsuybh3pJRjZgE
-# dpLiKFDNl69Euk5iXEOXZC3njxqAHFlU+4ql1+gkcGSz8Hk2GQAXS5kvKOzYNNHF
-# aFf+E73TEgHdPITDp6dy/HLyaqgyb0wXFilsTK+W/ffTNVSaQIkjM2jhAAz8OvjP
-# 1NUvzzlsCTTFuqPiTRMGMVEhE7lmIBnAmCyA+xL+VWrhPa9Au7GWquQR2bqF9D2l
-# nndqJFPsRkjm7Z1RaC5XB/rtaF7hveq8fg55BRE6g1fjrZJ+66gGA/SRsQ1X2OFL
-# gHfwK7NN+sLjCu1JaoE/wu9pKJoDcBS6TEe+w7bJ9S+kTKPZusBlGWhSlqHkwnvU
-# DrZubZO23m92EHM=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMTAyMjEwNDNaMD8GCSqGSIb3
+# DQEJBDEyBDCMZuEmwhSoYiWpOnmduxEne+CKI6/H8KZkPiwGGtG4umz6WQ/APEny
+# 8vfx9MRxIf0wDQYJKoZIhvcNAQEBBQAEggIAnEf71DCJPtIY4ZkbGBLCKJAOqyMA
+# UgSNsndmc2gDFdNuI/+09L8WkHzv4NhY5jPRvAxaiG8FBjHZx+z+tNQZqi51HCWU
+# NFggwJ4HHwBBEWwqFXS1o0eaforWIPehbtN1dagujAQdw6TMzN+hNWiBwONZ4p7m
+# Z/f1wMmCN6scs6CPbdvuc6sp8VmE8z0E3NipHTpNhm4RA9rVy2QMKo3bI2f/D8sW
+# rKzkesRf6y7i/NDFIm2Hcgwb4KygogvGOlPav93DPUidBwjZ/qA9ifFu/4TiAeVS
+# Ss/SF91XilVYU68WSU7GdpukPasDstD99e1KI78wQmV8RF/ESbk5Q6zg9lUD8y+F
+# Frn2XevesAxJZFUa0QxeiaMXZ3s+AKYhgH14ITqWr46o4pZrs6P4HRkQOPMEk4fe
+# yJK3Ttf/hv5XnR3BUiHlBb8eysZgufvxlkBBA9I4uCTupDZvdGTGPQu6XwGKP1kS
+# BZJrUORxZx5r1dca7rglpO3f6LhwsyO+pgxzbji4hW26Rix+D/5vPhYJ5OdLtgbS
+# +mH+nwfewYKmCJE8QCySq29Vxx/2aoc0epj7UaiWHqAGJJgtCtvouNopLDxaFfOG
+# i6H4HdBOK19umyLBsXoY+EzEZbyyHzgfSOX/nCWKx+aI7rhZne/B1HSUbTS8jIGP
+# EKuwcpE4aIbnAyU=
 # SIG # End signature block
