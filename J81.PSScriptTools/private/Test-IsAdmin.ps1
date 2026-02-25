@@ -1,107 +1,43 @@
-﻿function Get-SoftwareInventory {
+﻿function Test-IsAdmin {
     <#
     .SYNOPSIS
-    Collects installed software information for system inventory reporting.
+    Test if the current user is an administrator.
 
     .DESCRIPTION
-    Retrieves detailed information about all installed software packages on the local system
-    and integrates the data into the system inventory reporting framework. The function
-    collects software details including name, version, manufacturer, and installation date.
+    The 'Test-IsAdmin' function checks if the current user is an administrator. The function returns a boolean value
 
-    .OUTPUTS
-    [PSCustomObject]
-    Returns software inventory data integrated into the system inventory framework
-
-    .PARAMETER InventoryFilePath
-    Full path to the system inventory JSON file where the software data will be stored.
+    .PARAMETER ErrorIfNotAdmin
+    If specified, the function will throw an error if the user is not an administrator.
 
     .EXAMPLE
-    PS C:\> Get-SoftwareInventory
-    Collects all installed software and saves to the default inventory location
-
-    .EXAMPLE
-    PS C:\> Get-SoftwareInventory -InventoryFilePath "C:\Custom\Path\Inventory.json"
-    Saves software inventory to a custom location
+    Test-IsAdmin -ErrorIfNotAdmin
 
     .NOTES
-    Function  : Get-SoftwareInventory
-    Author    : John Billekens
-    CoAuthor  : GitHub Copilot
-    Copyright : Copyright (c) John Billekens Consultancy
-    Version   : 2025.1110.1415
+        Function Name : Test-IsAdmin
+        Version       : v1.0.0
+        Author        : John Billekens Consultancy
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
-    param(
-        [Parameter(Mandatory = $false)]
-        [ValidateNotNullOrEmpty()]
-        [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
+    Param (
+        [Switch]$ErrorIfNotAdmin
     )
 
-    begin {
-        Write-Verbose "Starting $($MyInvocation.MyCommand)"
-        $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
-    }
-
-    process {
-        try {
-            Write-Log "Importing PackageManagement module"
-            Import-Module PackageManagement -Force -ErrorAction Stop
-            Write-Log "Module imported successfully"
-
-            # Retrieve Installed Software
-            Write-Log "Retrieving installed software packages"
-            $inventoryResults = @(Get-InstalledSoftware | ConvertTo-Hashtable)
-
-            # Save Inventory
-            Write-Log "Saving SystemInventory..."
-
-            $inventoryData = @{}
-            # Add or update InstalledSoftware section
-            $item = "InstalledSoftware"
-            Write-Log "Saving $item..."
-            $inventoryData[$item] = $inventoryResults
-            $inventoryData["$($item)Report"] = @{
-                Order        = 3
-                Title        = "Installed Software"
-                Fields = [Ordered]@{
-                    ProductName    = "Product Name"
-                    ProductVersion = "Version"
-                    Manufacturer   = "Manufacturer"
-                    InstallDate    = "Install Date"
-                }
-                SortBy       = @("ProductName")
-                SortOrder    = @("Ascending")
-                Highlight    = @{}
-                Searchable   = $true
-            }
-            $inventoryData["$($item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
-
-            Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $item
-
-            Write-Log "Software inventory collection completed successfully"
-        } catch [System.Management.Automation.ItemNotFoundException] {
-            Write-Log "Inventory file path not found: $($_.Exception.Message)" -Level "ERROR"
-        } catch [System.Management.Automation.CommandNotFoundException] {
-            Write-Log "Required module not available: $($_.Exception.Message)" -Level "ERROR"
-        } catch {
-            Write-Log "Important Error details:"
-            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
-            Write-Log "An error occurred during software inventory collection: $($_.Exception.Message)" -Level "ERROR"
-        }
-    }
-
-    end {
-        Write-Verbose "Completed $($MyInvocation.MyCommand)"
-        $Script:LogFile = $null
+    Write-Verbose "Starting function : Test-IsAdmin"
+    $userWindowsPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent([Security.Principal.TokenAccessLevels]'Query,Duplicate'))
+    $isAdmin = $userWindowsPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    Write-Verbose "Ending function   : Test-IsAdmin [isAdmin:$isAdmin]"
+    if ($ErrorIfNotAdmin -and -Not $isAdmin) {
+        Throw "User is not Admin, script need elevation!"
+    } else {
+        return $isAdmin
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCfmVWZjC8mTYyI
-# HexIOcemqg+a4+LZyd8vG++Cu2wC7KCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAjRZwy5sQmAqec
+# pfxaF8xyFze0iTbnoCT58mZU+MMY4aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -277,31 +213,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCBLr5aCZCP6rQ6GT18X3yZ1PmdEXvgpCeT3rPPICIXN
-# xjANBgkqhkiG9w0BAQEFAASCAYAL8PQgeA+9Xs/uMV9n8BpafMFiIwdvGpJ9g5K0
-# euAxPB0BmiMA0PCh1qBcrU81LwX02dldEIF3wrCPjI4gniQTxsEosk8/d+EMJso7
-# XHHaYl71anrXbW0O8RmjyIFu1Ql2K5YbpwmQHnMEfHSkZyjVxC5XgB/PpSlsN3Sc
-# xbE/LOvyFAictclcxpEXN6szxu9b7umiksoVSeWz1BB7OUlDLwOhW9ed8d0xh74e
-# PDx0IfOc9hDlXxhO6FqgGw0/fhq3+SZXDnOc7CSWQ9j+raaTZytNouEZC4hvTtl5
-# yRNrpaQ0Zzd+eRYrM1aXli7s1sV9XjevGpW3eHOqRpwfq9m3UjUbmTOXOhrVhz7x
-# +hths6tMbHN3tg/XABrJnQIcPMINJXRK8dh13eAlI0w2sQnDvG7yAg18IX5H2uor
-# n2zgTuqumxewBOse1Zg1sf0kACe78GHvF6bZKSfGHHumVZEsO9gqRcbG5M7Hiu4X
-# id0GXRboJgB46cQiiFwnDyYfSQyhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCC3vZKKnaNRZ9Ot1HNb7xnp8HhBq1/ZgSjiBqi+Bk5v
+# TzANBgkqhkiG9w0BAQEFAASCAYBYxBmDdiYHGFU7QZ0UcHnOkwuqYEgyYQ3IYWbc
+# DQVy12Ilq6UPWjWIO6SO20Xo0InfqXCmmwPUAL41mN2BoE/4C8fJDHP94gSy9Ope
+# 3h8ZKCd9NEriixH2WZGiyKJt2QVgY2ekTTipytZ3IPfOyC014JxdxaQMtYaiJGuj
+# YgQFY8mO2dkwBJ3V2X1bxqj+8fAt8Q6liHFrEu1wARDsxshR6FScB8baS43u75qu
+# ifP2tQDCCdlJ7duOZaEsQUpJ0WfcrSUm8G9BdMH2FD6Q+60B0GBpCO9NbORq+JvV
+# qgPvnMcLQYkCIDs82lRoVXNORAjfgEjdhbvS2VUc2CDq3wub4eOIlUbfQE3SPS8k
+# E9CQevfMYFG8M4b6oJdp737PZ5Mu11q/6nmR+3RGgwrXGNdRNe6zmVNjAR3Et5nq
+# GG3CGk+RGpgLymG5xiN5+h/0OXyGFFk6XSdWR/1BHvTXYRmk696K6bEvbXVl5eR7
+# 1G/EMUyvEnWeaip3ONHNhGzhvJihggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAyMjUwODU4NTFaMD8GCSqGSIb3
-# DQEJBDEyBDBylAPcwpOaqMFL90cLxA70Q6Bn7asFy+fLO+0yCX2xw8yeQdp9Jd1Q
-# P1XpyECytUYwDQYJKoZIhvcNAQEBBQAEggIAbEj1LPSMt+/1dj2P7Aid4qu9Q8Ik
-# b8IuBShTu0EQu18mcxihs49vJnyZ5rNroFUxT26zoeqIyjF6oe5DWvcej6uCCxwr
-# Uyzb2PkcQBZ6b/tsWd+uDaADzKddvlbg3Gk7vJLCjcOtuWN/CMf7cw5MY1Tb3MdC
-# qUGMfLOhcN2eX9TnQRcZ+cUIEBiq2d3FGdtADkgJig4tX5pRdxugkFuJ5loowA6x
-# Er38kXfrHmLnME46kYWm/BntKcHqihiI3Z+O3AVdhmE2AeUjBB2LzrAvQ7DMT79/
-# aovdQKhrRmWRm08yWZHYwiMrApVBMRZsFmt77SRQYqY1CT4T2bnYVG5bC7vwwxFn
-# vKhaxTmTZcSmv7RQr5M17zNd3ahL4p0oCjIa0nu0S+Pv27tiYoxFnWvw0AYvfQvK
-# LVCvztClNDphFE7miisVUVmUlc0GxG+QYGMKwZmwdRNRPwPOZpN6c2TGPb1K4Zus
-# av9EBfGr4hkxCSdGyCjxIQXQ9BeejFoMxVjF9uu3vbIBsP/LcjbMxSmDM07mTFwF
-# szVKmik7H2zQkRqvAL4zr2nLr9spLZCWWy+j1gGXcMKEBEQDxXcQ8cIRRf1E3rLd
-# 9GXuEVBEofmp+y6RUPdvN5zf7JF+BZrmSkgjltYm43eB0Sbe6dcOux+nloKWopKA
-# 7i+Cs5X7+BHsFug=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAyMjUwODU4NDhaMD8GCSqGSIb3
+# DQEJBDEyBDCpc6LoUuS9dRMnVgMFruEmZG3UntVDgvoF9IWjQBJOgySNw6mczG1M
+# TcJS92zK7wcwDQYJKoZIhvcNAQEBBQAEggIAMlgBVx/TZBaQ1pevsExsv1535YFb
+# OMGZflyOs/hCvdq+mPZ6Em5L+vg6PBf8+z0MK3J5f0upWuDDL4UCrWpPweWJ1wBK
+# ZtrK0jyh3EHbn2KFWK6/YSYwGr7bMvPbexDwwdpt/FmWM3o17O19IIy1TzPUl65w
+# vXs7qSa/Glmu2JnDA5QJt7pwKLcJQO64BRk1dm05SfEcvbTB5o2rWjf9VSA492WF
+# cmvUng4OZiC/oC/77cvsYJsnoI8M0RtVOskjU5jafUDeXe3ToXwkGSS4SSoqK6vO
+# gknYJt8lZ7QlN4OmleQRbLdTtiXiXD3vyWiZ5ybGu+UX0HQWhLWoNbcmtAyn9/wd
+# SLGxG1QtUgxVgggnwxx38Tw8Xs1Onf81x98Qw24BzSAzfizNoOfSTaC3+teJ+ww1
+# 1sR5R7LBA4M8HADxua2u7I5cuGHj6yPE0Rf8Pg5QDA/XHDXCYQCDtbgPOguTrANa
+# Q0OVuOFFTIkgylQstq21PWaRujfsYh1kSdzqAywmShQ2Um5VB0B0pyimKLEJXvYy
+# oioV244s8M9x/0xWriTt/7DLCFC6bD/Gs5SwWEPsarmjYzFR4ngGK4EAKq8IuK/5
+# AsWhCXoKJBs5ZTB1FJOvpkxbOGg5/zSA8CkEIOLbpmTSwruXt5TxufIu+9fnrhsH
+# 9t7ZE8jtqZmKzMQ=
 # SIG # End signature block

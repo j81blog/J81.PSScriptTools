@@ -1,41 +1,67 @@
-﻿function Get-SoftwareInventory {
+﻿function Get-WindowsAutoRunInventory {
     <#
     .SYNOPSIS
-    Collects installed software information for system inventory reporting.
+    Collects all autorun/startup applications and configurations for system inventory reporting.
 
     .DESCRIPTION
-    Retrieves detailed information about all installed software packages on the local system
-    and integrates the data into the system inventory reporting framework. The function
-    collects software details including name, version, manufacturer, and installation date.
+    Retrieves comprehensive information about all autorun locations on the system and saves
+    to the system inventory JSON file. This function calls Get-WindowsAutoRunOverview to
+    gather the data and then integrates it into the inventory framework.
+
+    Includes:
+    - Registry Run keys (HKLM and HKCU, including RunOnce and Policy Run keys)
+    - Startup folders (All Users and Current User)
+    - Scheduled tasks configured to run at startup/logon
+    - Services set to automatic start
+    - Active Setup registry entries
+    - Winlogon registry keys (Userinit, Shell, VmApplet, AppSetup, System)
+    - BootExecute registry entries
+    - Group Policy startup/shutdown/logon/logoff scripts
 
     .OUTPUTS
     [PSCustomObject]
-    Returns software inventory data integrated into the system inventory framework
+    Returns autorun inventory data integrated into the system inventory framework
 
     .PARAMETER InventoryFilePath
-    Full path to the system inventory JSON file where the software data will be stored.
+    Full path to the system inventory JSON file where the autorun data will be stored.
+
+    .PARAMETER IncludeServices
+    Include Windows Services that are set to Automatic start. Default is $false to reduce data volume.
+
+    .PARAMETER IncludeScheduledTasks
+    Include Scheduled Tasks that run at startup or logon. Default is $true.
 
     .EXAMPLE
-    PS C:\> Get-SoftwareInventory
-    Collects all installed software and saves to the default inventory location
+    PS C:\> Get-WindowsAutoRunInventory
+    Collects all autorun entries and saves to the default inventory location
 
     .EXAMPLE
-    PS C:\> Get-SoftwareInventory -InventoryFilePath "C:\Custom\Path\Inventory.json"
-    Saves software inventory to a custom location
+    PS C:\> Get-WindowsAutoRunInventory -IncludeServices
+    Includes Windows Services set to automatic start in the inventory
+
+    .EXAMPLE
+    PS C:\> Get-WindowsAutoRunInventory -InventoryFilePath "C:\Custom\Path\Inventory.json"
+    Saves autorun inventory to a custom location
 
     .NOTES
-    Function  : Get-SoftwareInventory
+    Function  : Get-WindowsAutoRunInventory
     Author    : John Billekens
     CoAuthor  : GitHub Copilot
     Copyright : Copyright (c) John Billekens Consultancy
-    Version   : 2025.1110.1415
+    Version   : 2025.1116.1200
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory = $false)]
         [ValidateNotNullOrEmpty()]
-        [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
+        [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json",
+
+        [Parameter(Mandatory = $false)]
+        [switch]$IncludeServices = $false,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$IncludeScheduledTasks = $true
     )
 
     begin {
@@ -45,33 +71,43 @@
 
     process {
         try {
-            Write-Log "Importing PackageManagement module"
-            Import-Module PackageManagement -Force -ErrorAction Stop
-            Write-Log "Module imported successfully"
+            # Call Get-WindowsAutoRunOverview to collect all autorun data
+            Write-Log "Retrieving autorun entries from system"
+            $autoRunOverview = Get-WindowsAutoRunOverview -IncludeServices:$IncludeServices -IncludeScheduledTasks:$IncludeScheduledTasks
 
-            # Retrieve Installed Software
-            Write-Log "Retrieving installed software packages"
-            $inventoryResults = @(Get-InstalledSoftware | ConvertTo-Hashtable)
+            # Convert PSCustomObject array to hashtable array for inventory storage
+            $inventoryResults = @()
+            foreach ($entry in $autoRunOverview) {
+                $inventoryResults += @{
+                    Name         = $entry.Name
+                    Command      = $entry.Command
+                    Location     = $entry.Location
+                    RegistryPath = $entry.RegistryPath
+                    Scope        = $entry.Scope
+                    Type         = $entry.Type
+                    Category     = $entry.Category
+                }
+            }
 
             # Save Inventory
-            Write-Log "Saving SystemInventory..."
+            Write-Log "Saving autorun inventory..."
 
             $inventoryData = @{}
-            # Add or update InstalledSoftware section
-            $item = "InstalledSoftware"
-            Write-Log "Saving $item..."
+            $item = "AutoRun"
+            Write-Log "Saving $item with $($inventoryResults.Count) entries..."
             $inventoryData[$item] = $inventoryResults
             $inventoryData["$($item)Report"] = @{
-                Order        = 3
-                Title        = "Installed Software"
-                Fields = [Ordered]@{
-                    ProductName    = "Product Name"
-                    ProductVersion = "Version"
-                    Manufacturer   = "Manufacturer"
-                    InstallDate    = "Install Date"
+                Order        = 8
+                Title        = "AutoRun Applications and Tasks"
+                Fields       = [Ordered]@{
+                    Name     = "Name"
+                    Command  = "Command"
+                    Type     = "Type"
+                    Scope    = "Scope"
+                    Category = "Category"
                 }
-                SortBy       = @("ProductName")
-                SortOrder    = @("Ascending")
+                SortBy       = @("Category", "Type", "Name")
+                SortOrder    = @("Ascending", "Ascending", "Ascending")
                 Highlight    = @{}
                 Searchable   = $true
             }
@@ -79,15 +115,13 @@
 
             Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $item
 
-            Write-Log "Software inventory collection completed successfully"
+            Write-Log "AutoRun inventory collection completed successfully. Collected $($inventoryResults.Count) entries."
         } catch [System.Management.Automation.ItemNotFoundException] {
             Write-Log "Inventory file path not found: $($_.Exception.Message)" -Level "ERROR"
-        } catch [System.Management.Automation.CommandNotFoundException] {
-            Write-Log "Required module not available: $($_.Exception.Message)" -Level "ERROR"
         } catch {
             Write-Log "Important Error details:"
             Write-Log "$($_ | Get-ExceptionDetails -AsText)"
-            Write-Log "An error occurred during software inventory collection: $($_.Exception.Message)" -Level "ERROR"
+            Write-Log "An error occurred during autorun inventory collection: $($_.Exception.Message)" -Level "ERROR"
         }
     }
 
@@ -100,8 +134,8 @@
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCfmVWZjC8mTYyI
-# HexIOcemqg+a4+LZyd8vG++Cu2wC7KCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCqffHGpVlze/8P
+# nDAwDSdJO+DRn+Ex+vTooKfHpOtikqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -277,31 +311,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCBLr5aCZCP6rQ6GT18X3yZ1PmdEXvgpCeT3rPPICIXN
-# xjANBgkqhkiG9w0BAQEFAASCAYAL8PQgeA+9Xs/uMV9n8BpafMFiIwdvGpJ9g5K0
-# euAxPB0BmiMA0PCh1qBcrU81LwX02dldEIF3wrCPjI4gniQTxsEosk8/d+EMJso7
-# XHHaYl71anrXbW0O8RmjyIFu1Ql2K5YbpwmQHnMEfHSkZyjVxC5XgB/PpSlsN3Sc
-# xbE/LOvyFAictclcxpEXN6szxu9b7umiksoVSeWz1BB7OUlDLwOhW9ed8d0xh74e
-# PDx0IfOc9hDlXxhO6FqgGw0/fhq3+SZXDnOc7CSWQ9j+raaTZytNouEZC4hvTtl5
-# yRNrpaQ0Zzd+eRYrM1aXli7s1sV9XjevGpW3eHOqRpwfq9m3UjUbmTOXOhrVhz7x
-# +hths6tMbHN3tg/XABrJnQIcPMINJXRK8dh13eAlI0w2sQnDvG7yAg18IX5H2uor
-# n2zgTuqumxewBOse1Zg1sf0kACe78GHvF6bZKSfGHHumVZEsO9gqRcbG5M7Hiu4X
-# id0GXRboJgB46cQiiFwnDyYfSQyhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCBh7BqfCZo8DxGex3p7BNkatmKf7dP/9CCpW7TUBatf
+# VzANBgkqhkiG9w0BAQEFAASCAYBw7rGKsUac/tUeYaTTWBfnrPSANQUHL/SO760/
+# FuECznwo2z7aOaBO6h03MU3F0ae2HTQgF3radk8EUkQdsVak8WPiag6O7Np4A33o
+# pkdJNfsUF6xiEEK1PGUtDrKgeCUrSSsbGW3fOPro9A0iP1Cj7WrDmafo6mVRojjS
+# s7O7oZx7IsE0I8uVurZMdaF5DX/HHniVWDVHnEZbq7hS4+vT1cGC7O9rVXzBpXh+
+# c3b5l6J+5MK/2d9nSz03GGpYe3gbxuxriMAN0zCFAa1qvne8dr9kAgfty6PyRWM4
+# kEoPU7m9Wt8mdJ3Iewd8D7cx3FvByleRFRPqwDRD53neAAGgddbuRB5sAlsgx33L
+# n03RWd7NxC+Yc261RfIGqv/O968HvzoD/zAIM7jJ800SbCVnpu3XWJZJGclHXpEj
+# L2J8iPdBcuKHGwFD7NPFgjNAJoxIHbrchXr6uMi4JNMzA9YUopw0g5syLdD7M1l3
+# BfNP/0y2yH5pdewb7pq5qv+JDCOhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAyMjUwODU4NTFaMD8GCSqGSIb3
-# DQEJBDEyBDBylAPcwpOaqMFL90cLxA70Q6Bn7asFy+fLO+0yCX2xw8yeQdp9Jd1Q
-# P1XpyECytUYwDQYJKoZIhvcNAQEBBQAEggIAbEj1LPSMt+/1dj2P7Aid4qu9Q8Ik
-# b8IuBShTu0EQu18mcxihs49vJnyZ5rNroFUxT26zoeqIyjF6oe5DWvcej6uCCxwr
-# Uyzb2PkcQBZ6b/tsWd+uDaADzKddvlbg3Gk7vJLCjcOtuWN/CMf7cw5MY1Tb3MdC
-# qUGMfLOhcN2eX9TnQRcZ+cUIEBiq2d3FGdtADkgJig4tX5pRdxugkFuJ5loowA6x
-# Er38kXfrHmLnME46kYWm/BntKcHqihiI3Z+O3AVdhmE2AeUjBB2LzrAvQ7DMT79/
-# aovdQKhrRmWRm08yWZHYwiMrApVBMRZsFmt77SRQYqY1CT4T2bnYVG5bC7vwwxFn
-# vKhaxTmTZcSmv7RQr5M17zNd3ahL4p0oCjIa0nu0S+Pv27tiYoxFnWvw0AYvfQvK
-# LVCvztClNDphFE7miisVUVmUlc0GxG+QYGMKwZmwdRNRPwPOZpN6c2TGPb1K4Zus
-# av9EBfGr4hkxCSdGyCjxIQXQ9BeejFoMxVjF9uu3vbIBsP/LcjbMxSmDM07mTFwF
-# szVKmik7H2zQkRqvAL4zr2nLr9spLZCWWy+j1gGXcMKEBEQDxXcQ8cIRRf1E3rLd
-# 9GXuEVBEofmp+y6RUPdvN5zf7JF+BZrmSkgjltYm43eB0Sbe6dcOux+nloKWopKA
-# 7i+Cs5X7+BHsFug=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAyMjUwODU4NTRaMD8GCSqGSIb3
+# DQEJBDEyBDAOtpGaRh8gnpPNPQ677Tsm4m0gKM7xPVMlofwNuhmqWQ0jLp4oDZZu
+# H5OcEyEPjDkwDQYJKoZIhvcNAQEBBQAEggIAuv9p0zyz/Tr9SLn50ygXWKEryNX+
+# Gj96vQ7+4yDYzo9vrhhR1mRnMwcBehPIGTu5wpks4CeoB8XdFuC03z7IopANZPH3
+# n07NIepCh6q0fqNLa0TSIVssecN03wKNZz4zWwC5v5KM/1Yr0GkRdPE+3v6/R8+7
+# aK9PYMf/ZgVw4m2gVEQFJlfX5XR/V5CseLC9Pd7FTMSTV582wKkd/jL1zN1wkvdN
+# JAkQFDXNOYRMHDWTf8lkEt12uSMKR/ah9zZUN4d/O3nCXcN1Z3UkrS3TeKSBlIhM
+# jMo3lA6dO5T7IQiB10+Y/HdeUgOgHMbQsk2NXj7uG5OwtEONprAArY93qN1AMoK8
+# d73DJxvkNdtgdw2DhxLdS9eW3f+/jjRIoiCD7JpoNw1I1LbEHD+eU7qEFq4yNgjY
+# mEg/HSHRNv+VPQL6hrz42zSmMKxHwo8CpoitPSofUuRs6GS6ktdOv0NeCEnUkNRk
+# K/Fkp0uki1VyF+rT6/slULpuzbEt9uJJ+8jo8kWBlR/IfRn0jdc+0uAXBmOU8Fmi
+# wLLxZDfg+cbpdp75eS5axuZ/emQYFyZ63VcToYqYHLy18hQsQshII9GyIbrUWGBT
+# uL/RRpt9ai2YjJjlqCzQ8WhOV+uVRRrIG9Mm9MF15Yd+JnEUcZPjcrw7YLNgmqrO
+# wbFwxHy+e7+z4mg=
 # SIG # End signature block
