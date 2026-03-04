@@ -4,7 +4,7 @@ on: push
 jobs:
   pester-test:
     name: Pester test
-    runs-on: windows-2022
+    runs-on: windows-latest
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
