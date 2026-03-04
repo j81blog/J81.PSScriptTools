@@ -1,10 +1,10 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
     [string]$RemoteBranch = 'dev',
 
     [Parameter(Mandatory = $false)]
-    [String]$Uri = 'https://github.com/j81blog/J81.PSScriptTools/archive/refs/heads',
+    [String]$Uri = 'https://github.com/j81blog/J81.PSScriptTools',
 
     [Parameter(Mandatory = $false)]
     $ModuleName = 'J81.PSScriptTools'
@@ -43,8 +43,9 @@ if ([String]::IsNullOrWhiteSpace($PSScriptRoot)) {
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
     }
 
+    $HostUrl, $Owner, $Repo = $Uri.TrimStart('https://') -split('/')
+    $Url = 'https://{0}/{1}/{2}/archive/refs/heads/{3}.zip' -f $HostUrl, $Owner, $Repo, $RemoteBranch
 
-    $Url = "{0}/{1}.zip" -f $Uri.TrimEnd('/'), $RemoteBranch
     Write-Host "Downloading latest version of $ModuleName from $Url" -ForegroundColor Cyan
     $File = [System.IO.Path]::Combine([system.io.path]::GetTempPath(), "$ModuleName.zip")
     $webclient = New-Object System.Net.WebClient
@@ -93,8 +94,8 @@ Get-Command -Module $ModuleName | Format-Table -AutoSize
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBetvJ01T2frAd4
-# rhYHpE/EsfTkNAlEln0MJw/VzWTEuKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCKGGWBIdDZpHvc
+# uWI+xUZZB2uHJl538+PuZJydOt3Yi6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -270,31 +271,31 @@ Get-Command -Module $ModuleName | Format-Table -AutoSize
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCA+tl1ZQ+K92wOTdVHQQM58IM9CUWBR87A5vSlDW77x
-# 6jANBgkqhkiG9w0BAQEFAASCAYB6YTWCNaPAS+erp79sQ4n7qfAkdMJwLiA3q0Oa
-# WBAEecMfyHXpUklnOx6/GEPvGds7rMBRELfp67D+y52Bvth6K7hgS1Ie0LvwFPgT
-# o6WrSrXBLCf1wR+s+37B1BOU6bUUxED7pK969vq9Hgtm7M8eWnkplmeJOuxsXkfp
-# paa2w34/iKQR+oG9mk6ynjOrhEuYFO8vxsHbs5FDOz9byRYurEwFCkdfMosYE9t7
-# BeDI5xBXg6FsCxkyot+1LjWENotM12DW5GbUBeIYV2JJOWz1HWLJSqwtwI6ufNoO
-# 98hnRR2S7HGU8TwUuGYwGYQLqXB6dKP5rXH2ulGtNnf0sEONvqBRLoKc/47/2vyq
-# v3hyiLm8ba5fxONKGGVSStKgW/vz8kM6Hls00zENJ/9ky0Ynd0a91kbKBtLeZEgL
-# BB+QYJHmeAZZ2JY5ljm6nbXdrE310/Iy9L4B3NPMBQsm2SN6VhNW5c4cQzzEg+Ys
-# 7aA+VZoLkr8Tbvj+24JqgBi5OVyhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDn0g31JO9GM9n5LaA8K4h4UBxC+V3whIMV8HPScjKY
+# zjANBgkqhkiG9w0BAQEFAASCAYCJe7AIgLMtMTtEo7OC5UKlf3PxYP+NNNHmX2Wp
+# X9uyX5nCztA793hri4SRedUV0D+lB7X/qmr0Eh0DPIdmkTG3aM8FYhkKLavI8PtH
+# Owczc5ZBW6Mpw/gIAfaXxa3WkgwYX4JGb2E2HNwX+rbLxXFd2hJWKKoc+tcyot7o
+# Fpk+EGNT4vdrRewpgnQQxJVGpBdlaGsH82iasY7E6cRTyllHTvMArgHy9U8Yf+zG
+# LXVJYZPulj9VMH2Ls8IpXRf5UMMgmgvEu/i2iQJwxbYPWH+0Ok9RGma8TQJGiEpv
+# Byoa8I1y9zMkH0U4J2tJsLicTbtpnuTdfSJmVJmPkpzOME9xXuQqZDQtqC0PaQdj
+# uAiw/PUYsNa8NEWRVMv8DIT4vQwSGR2QzZc4CoOzu997B9U82b6sGdiIytPToAUs
+# dUuP9dEeiL5/ZEHN2ErR7Mggb6j2Ub3OtwjaeyMUXM/GomXeQU6G6Bk1BdQn1pkF
+# RPffJEiNXf72+gtDvJ2kCq+YlP6hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MTQxOTA5MzRaMD8GCSqGSIb3
-# DQEJBDEyBDCjj8hWPWstUr5PV5JnotLb9mEo6Eu/UbGTq/DQQnEROGQAquDuOb41
-# fjVS7FjMc/0wDQYJKoZIhvcNAQEBBQAEggIAV8cML1Dt15NPf7jBDrlv/0hO7laf
-# wpRblMq2b5T2mgH8MK1P4WOEEuy63youzbclrqySrOHm/2vvvTmJQJDer6i1SD1r
-# RWKEgImKFptTPN0YTlGQBExZMtgJooTkc7ZyuwllhEHH/F+D14KPo1aDoit3Qa94
-# MTMrZ4+Y/sjpVj+PO3ItmNRtV03mC4kfNHYQCLCluBZ86RotlHRvhjv/zoNmRnW0
-# 4sXx4wLmnvV9L5+67f9px91DDWvDcab3+PpvXgbg4gd2IZsTxzHsWqf+ZOpz11MH
-# +YNlbtl+5RaSNJ9uXVtEQCy5/l7pL0bgwc1w6MBW7ZEL1R4ur4FzzOw1d8x/D7HX
-# H4D1w7EO8VIksTtJ2vud6+lBv6/DZogLj4ykIAUBhJnOQ4PWenp5XzHAElBb4f6H
-# JhmTtdXByGpmp6Hyz6cjxPOdtcutvFpex9JpEHDVBQP5LHiwDVbZRXuw4ac+75fN
-# hMFzelkb8nK7DuHfmVBRaTNAFgLFpBvN7BwTR6khYuePXorcedYhthGzq2KoQ0V3
-# T1NH+1QEZPk2n1hvbpUnAZ80fQ6jYNtOK0RdCsBQ5MISDBYY+eUC3KqhPVVeHvrJ
-# I1qjLwNtatt4dOblvoFFGFUERcqK3E2O0VQXYVaTx4omFKvKC3z0DosfRX+OJwNT
-# sQDF2VksJQpKDLE=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMDQxMzI5MjVaMD8GCSqGSIb3
+# DQEJBDEyBDB05bqpyyXAXF9dxJpzCLTmt6xn6BvfGsUZp0vx5bJeuyGGy0Oeu1hd
+# WEhvisZ3yM4wDQYJKoZIhvcNAQEBBQAEggIAszpDje1nED5Ok7DHi4ksGfbXxDwR
+# r1NyEFkAozP1kXXLD3hpDyULJ1xeSyg9V30wKXKWwwkP/zQ5ZiCF/MV4U19SgAfo
+# vUBhftYc9xjfO312+fKk1bsapv3BzUOaNzHZEOXBL1t4wuM5Uc8/ujOGY+ZErJsu
+# e3ElASMFvKotDu+vNSLY99i3FSrpRTnZv9yj9nMonREF8/ndVxyA1kfQYvXbPhhj
+# PC2R+ikUPKZUL+DApIfsB5YefEfqYyZVi8XpSkuq9HRSgbIKxoBc1YoOm0CxYY9s
+# 5PMnBO3hBkNNwVKoRtfatLogOKFFp18FwIJlTfimdQwIv0dmLRGxlRtkmlhSuphP
+# FyF4ZPidbdH4yPHDhvUSgNU/4WSh1Q0/lHnBg8iFwMKvlngLiNcd3TRP3IzaMFYl
+# bzZtuvet7lo7LCxwJlDqFSIGjzd5HlG0UNsR87aW0g8X/rIS/7M4846sxGsrkz41
+# DyIHoG6JVN23KlI2WVOmOFkv0kIh/jVBfCwrtlebvg0Ih0dQZRV1el7eDShHHyDF
+# w42Pd54zuac+BP/SVY7IrlQUs+RcNc4WLB/A4JOjGBQaHHpik1VKEnbhRijI+ual
+# kOTf3XpURXUxNaHXWJUaAD5pWQD9B9XjAwwrMvNap1oEpUl1gIsu/EUseDiqQFl0
+# Z0IOeKWNX8qI4HU=
 # SIG # End signature block
