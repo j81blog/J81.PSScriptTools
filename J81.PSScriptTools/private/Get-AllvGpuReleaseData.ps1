@@ -1,123 +1,216 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Get-AllVGpuReleaseData {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
-
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
-
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
-
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
-
-        .PARAMETER Repository
-            The name of the GitHub repository.
-
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
-
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+    .SYNOPSIS
+        Internal function that fetches and parses ALL vGPU release data once.
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
+    [CmdletBinding()]
+    param()
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
+    Add-Type -AssemblyName System.Web -ErrorAction SilentlyContinue
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
+    # Check if we have valid cached data
+    if ($script:NVCachedVGpuData -and $script:NVCacheTimestamp) {
+        $cacheAge = (Get-Date) - $script:NVCacheTimestamp
+        if ($cacheAge.TotalMinutes -lt $script:NVCacheExpiryMinutes) {
+            Write-Verbose "Using cached vGPU data (age: $([math]::Round($cacheAge.TotalMinutes, 1)) minutes)"
+            return $script:CachedVGpuData
+        } else {
+            Write-Verbose "Cache expired, fetching fresh data..."
+        }
+    }
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
-    )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
     try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
+        Write-Verbose "Fetching NVIDIA vGPU documentation from web..."
+
+        $url = "https://docs.nvidia.com/vgpu/"
+        $response = Invoke-WebRequest -Uri $url -UseBasicParsing -ErrorAction Stop
+        $html = $response.Content
+
+        Write-Verbose "Parsing HTML content..."
+
+        # Data structure to hold all releases
+        $allData = @{
+            Summary  = @()
+            Detailed = @()
         }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
+        # ===== PARSE SUMMARY TABLE =====
+        Write-Verbose "Parsing summary release table..."
 
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
+        $tableMatches = [regex]::Matches($html, '(?s)<table[^>]*>(.*?)</table>')
+
+        foreach ($tableMatch in $tableMatches) {
+            $tableHtml = $tableMatch.Value
+
+            # Only process summary tables with vGPU Software Release Branch
+            if ($tableHtml -notmatch 'vGPU Software Release Branch|Driver Branch') {
+                continue
+            }
+
+            # Skip detailed version tables (they have different headers)
+            if ($tableHtml -match 'Linux vGPU Manager|Windows vGPU Manager') {
+                continue
+            }
+
+            $rowMatches = [regex]::Matches($tableHtml, '(?s)<tr[^>]*>(.*?)</tr>')
+            $isFirstRow = $true
+
+            foreach ($rowMatch in $rowMatches) {
+                $rowHtml = $rowMatch.Value
+
+                if ($isFirstRow) {
+                    $isFirstRow = $false
+                    if ($rowHtml -match '<th[^>]*>') {
                         continue
                     }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
                 }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
+
+                $cellMatches = [regex]::Matches($rowHtml, '(?s)<td[^>]*>(.*?)</td>')
+                if ($cellMatches.Count -lt 6) { continue }
+
+                $cells = @()
+                foreach ($cellMatch in $cellMatches) {
+                    $cellHtml = $cellMatch.Groups[1].Value
+                    $cellText = $cellHtml -replace '<[^>]+>', ''
+                    $cellText = [System.Web.HttpUtility]::HtmlDecode($cellText)
+                    $cellText = $cellText.Trim() -replace '\s+', ' '
+                    $cells += $cellText
+                }
+
+                if ([string]::IsNullOrWhiteSpace($cells[0])) { continue }
+
+                # Extract major version
+                $majorVer = $null
+                if ($cells[0] -match 'vGPU\s+(\d+)') {
+                    $majorVer = $matches[1]
+                } elseif ($cells[0] -match 'GRID\s+(\d+)') {
+                    $majorVer = "GRID$($matches[1])"
+                }
+
+                # Determine category
+                $cat = if ($cells[2] -match '^EOL') { 'Older' }
+                elseif ($cells[2] -match 'Long-Term Support|^Production$') { 'Active' }
+                else { 'Unknown' }
+
+                $summary = [PSCustomObject]@{
+                    Category              = $cat
+                    SoftwareReleaseBranch = $cells[0]
+                    MajorVersion          = $majorVer
+                    DriverBranch          = $cells[1]
+                    BranchType            = $cells[2]
+                    LatestRelease         = $cells[3]
+                    ReleaseDate           = $cells[4]
+                    EOLDate               = $cells[5]
+                }
+
+                $allData.Summary += $summary
             }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
         }
+
+        Write-Verbose "Found $($allData.Summary.Count) release branches"
+
+        # ===== PARSE DETAILED VERSION TABLES =====
+        Write-Verbose "Parsing detailed version tables..."
+
+        foreach ($branch in $allData.Summary) {
+            $versionNum = $branch.MajorVersion
+
+            # Try to find detailed release table for this version
+            $patterns = @(
+                "(?si)vGPU\s+Software\s+$versionNum\s+Releases.*?<table[^>]*>(.*?)</table>",
+                "(?si)NVIDIA\s+vGPU\s+$versionNum\s+Releases.*?<table[^>]*>(.*?)</table>",
+                "(?si)vGPU\s+$versionNum\s+Releases.*?<table[^>]*>(.*?)</table>",
+                "(?si)GRID\s+$versionNum\s+Software\s+Releases.*?<table[^>]*>(.*?)</table>"
+            )
+
+            $detailMatch = $null
+            foreach ($pattern in $patterns) {
+                $match = [regex]::Match($html, $pattern)
+                if ($match.Success) {
+                    $detailMatch = $match
+                    break
+                }
+            }
+
+            if (-not $detailMatch) {
+                Write-Verbose "No detailed table found for version $versionNum"
+                continue
+            }
+
+            $detailTableHtml = $detailMatch.Value
+
+            # Verify this is a detailed version table
+            if ($detailTableHtml -notmatch 'Linux.*vGPU Manager|Windows.*vGPU Manager|Linux.*Driver|Windows.*Driver') {
+                Write-Verbose "Table for version $versionNum doesn't have detailed columns"
+                continue
+            }
+
+            # Parse detailed table rows
+            $rowMatches = [regex]::Matches($detailTableHtml, '(?s)<tr[^>]*>(.*?)</tr>')
+            $isFirstRow = $true
+
+            foreach ($rowMatch in $rowMatches) {
+                $rowHtml = $rowMatch.Value
+
+                if ($isFirstRow) {
+                    $isFirstRow = $false
+                    if ($rowHtml -match '<th[^>]*>') {
+                        continue
+                    }
+                }
+
+                $cellMatches = [regex]::Matches($rowHtml, '(?s)<td[^>]*>(.*?)</td>')
+                if ($cellMatches.Count -lt 5) { continue }
+
+                $cells = @()
+                foreach ($cellMatch in $cellMatches) {
+                    $cellHtml = $cellMatch.Groups[1].Value
+                    $cellText = $cellHtml -replace '<[^>]+>', ''
+                    $cellText = [System.Web.HttpUtility]::HtmlDecode($cellText)
+                    $cellText = $cellText.Trim() -replace '\s+', ' '
+                    $cells += $cellText
+                }
+
+                if ([string]::IsNullOrWhiteSpace($cells[0])) { continue }
+
+                $detailed = [PSCustomObject]@{
+                    Category              = $branch.Category
+                    SoftwareReleaseBranch = $branch.SoftwareReleaseBranch
+                    MajorVersion          = $branch.MajorVersion
+                    DriverBranch          = $branch.DriverBranch
+                    BranchType            = $branch.BranchType
+                    Version               = $cells[0]
+                    LinuxVGpuManager      = if ($cells.Count -gt 1) { $cells[1] } else { 'N/A' }
+                    WindowsVGpuManager    = if ($cells.Count -gt 2) { $cells[2] } else { 'N/A' }
+                    LinuxDriver           = if ($cells.Count -gt 3) { $cells[3] } else { 'N/A' }
+                    WindowsDriver         = if ($cells.Count -gt 4) { $cells[4] } else { 'N/A' }
+                    ReleaseDate           = if ($cells.Count -gt 5) { $cells[5] } else { $branch.ReleaseDate }
+                    EOLDate               = $branch.EOLDate
+                }
+
+                $allData.Detailed += $detailed
+            }
+        }
+
+        Write-Verbose "Found $($allData.Detailed.Count) detailed release version(s)"
+
+        # Cache the results
+        $script:NVCachedVGpuData = $allData
+        $script:NVCacheTimestamp = Get-Date
+
+        return $allData
+
     } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
-    }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
-        }
+        Write-Error "Failed to fetch and parse vGPU release data: $_"
+        throw
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCpefx7/O+xW5gP
+# sLBXe2aPcgWDziRV5dHPwg66fpWDgKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +386,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCAKPxasbSnXPzMF+gY72qg1ZqPshCbw+lRA396Q5BFw
+# /TANBgkqhkiG9w0BAQEFAASCAYCxA4IYTb4nvUEAWdjpgWseTUFMLML1krJ0oFfj
+# u+oAV1GOZGOI90MhjBlTVou4So5AOYyWtGtTwVONjRL1I/x8orLEubFV0BKZWrAr
+# pGsUyhncERomPZ5VAJElGrUdu6kVWCTOHyeaDocH1SwEsn8R3j7b8DWE+A2BhK1n
+# OvUbAzJ7ZIx/6vtWd1JirVtEr7Zu86azKQSxETBpvyCsU43AmMuaSlk+YaL7Korj
+# QIl/QKUIP2StrOT9AS+9WqVNHYgQSbQIu16j/yIoBRVSpXSM7OTzoUFM6lslg1pW
+# vVxIofwZKyvJ2QoOxkWiNVM69uPHJSAPLgXFA8QaidAcO0QctNhRRKV7ctwD8kIH
+# GsOwBlgWIcGz8MOQa/H7EoKhzri8wc8m48mzxkmFJA9RW2Q1KQ9MOweVm5Jp4k81
+# 1mUY5rR0rmZxkwHMzokOHhsc4sm4BiORNFBA0LaOnwLHQjDP//s30Ppt+5wADh1e
+# CVyt2V/e6spo8jsvgj86n2tx5O2hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODQ5NDVaMD8GCSqGSIb3
+# DQEJBDEyBDAygg1VJXl4vcgoArEQd684Yta0PFrucaXEghlOP9zqZjGFnkcEyZ6A
+# QddiFJzP6OQwDQYJKoZIhvcNAQEBBQAEggIAivpLQkrtpesDh0CqvV/j2anwwjPK
+# NanbLNv3gKPBgg46aeKwsmQFTrpiRHUYCu3WF3yImlIhy4Pn9DaARhX+nMNfDx5S
+# fPac1eZoZO9EUgF3RyAv3pLBWPum22i3orHGuc7cC41rQ2ZncBa3WlVEI4vsX0za
+# WqDt7SB0yANgOqDjFBRYraGJDm7ty0+CFqFVENJ9EKYZYFvX+ccspaoeSOa3LLgL
+# EFeqUoYfKhZMwOCfdixdWdI4uRtgJeDcmQxO7ezQOp3r13HiGdGtlTKPrU41B5Ya
+# a3DwtgOGgTYUzJBkQuob2xyEnoeroxmLgXPWkzSrNuejdILrM22zsihlfhh9BnJT
+# iGDm0rS+pw0utmoIK63Xiv+qFcEqb8Q1XL7YTe1ml4vaN6nELV5iuHR71lwEtH6p
+# /cp77+HOD9GkbWKBnAuhQS5ljyPxewHOEfTJPl7P15FfG0FUlp+apyTmxdVQ9J72
+# dO9vByKAdTjjuEEve0qxpBvA+WUholZn/Qa/C13goFtXnv3L7h13GO0QHX1/efIm
+# UfIuLyKm+ljdwc2NXbhZE0tNsfXO1bAxzNclomclZQB17Siq1BYH7HtXxhpVYcQY
+# IMCnU7qoYEOysLxUIgFE3LkBmfKRyIhS7PCqTaM4/Uwqz5RBAvsMKKRUzuZkzFgk
+# tmdP++t2ixt2wbk=
 # SIG # End signature block

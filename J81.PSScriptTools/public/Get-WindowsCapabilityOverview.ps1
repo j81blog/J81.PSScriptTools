@@ -1,123 +1,90 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Get-WindowsCapabilityOverview {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+    .SYNOPSIS
+        Get a list of all capabilities on the system.
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+        This function will return a list of all capabilities on the system.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .PARAMETER AsJSON
+        If this switch is present, the output will be in JSON format.
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    .EXAMPLE
+        Get-WindowsCapabilityOverview
+        This will return a list of all capabilities on the system.
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+    .EXAMPLE
+        Get-WindowsCapabilityOverview -AsJSON
+        This will return a list of all capabilities on the system in JSON format.
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
-
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+    .NOTES
+        Function Name : Get-WindowsCapabilityOverview
+        Version       : v1.0.0
+        Author        : John Billekens
+        Requires      : PowerShell
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+    [CmdletBinding()]
+    param(
+        [Switch]$AsJSON
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
-
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
-        }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+    $FriendlyNames = @{
+        "AzureArcSetup"                                 = "Azure Arc"
+        "Rsat.ActiveDirectory.DS-LDS.Tools"             = "RSAT: Active Directory Domain Services and Lightweight Directory Tools"
+        "Rsat.BitLocker.Recovery.Tools"                 = "RSAT: BitLocker Drive Encryption Tools"
+        "Rsat.AzureStack.HCI.Management.Tools"          = "RSAT: Azure Stack HCI Management Tools"
+        "Rsat.Dns.Tools"                                = "RSAT: DNS Server Tools"
+        "Rsat.Dhcp.Tools"                               = "RSAT: DHCP Server Tools"
+        "Rsat.FileServices.Tools"                       = "RSAT: File Services Tools"
+        "Rsat.FailoverCluster.Management.Tools"         = "RSAT: Failover Cluster Management Tools"
+        "Rsat.CertificateServices.Tools"                = "RSAT: Certification Authority Tools"
+        "Rsat.GroupPolicy.Management.Tools"             = "RSAT: Group Policy Management Tools"
+        "Rsat.IPAM.Client.Tools"                        = "RSAT: IP Address Management Client Tools"
+        "Rsat.NetworkController.Tools"                  = "RSAT: Network Controller Management Tools"
+        "Rsat.NetworkLoadBalancing.Tools"               = "RSAT: Network Load Balancing Tools"
+        "Rsat.Print.Management.Console"                 = "RSAT: Print Management Console"
+        "Rsat.RemoteAccess.Management.Tools"            = "RSAT: Remote Access Management Tools"
+        "Rsat.RemoteDesktop.Services.Tools"             = "RSAT: Remote Desktop Services Tools"
+        "Rsat.ServerManager.Tools"                      = "RSAT: Server Manager"
+        "Rsat.Shielded.VM.Tools"                        = "RSAT: Shielded VM Tools"
+        "Rsat.StorageMigrationService.Management.Tools" = "RSAT: Storage Migration Service Management Tools"
+        "Rsat.StorageReplica.Tools"                     = "RSAT: Storage Replica Tools"
+        "Rsat.SystemInsights.Management.Tools"          = "RSAT: System Insights Management Tools"
+        "Rsat.VolumeActivation.Tools"                   = "RSAT: Volume Activation Tools"
+        "Rsat.WSUS.Tools"                               = "RSAT: Windows Server Update Services Tools"
     }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
+
+    $capabilities = Get-WindowsCapability -Online | ForEach-Object {
+        $cleanName = ($_.Name -split "~{4}")[0]
+
+        if ($FriendlyNames.ContainsKey($cleanName)) {
+            $friendlyName = $FriendlyNames[$cleanName]
+        } elseif ($_.Name -match "Language\.(.+)") {
+            $friendlyName = '{0} {1}' -f (($_.Name -split "~{3}")[0] -replace "\.", " "), (($_.Name -split "~{3}")[1] -split "~{1}")[0]
+
         } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
+            $friendlyName = $cleanName -replace "\.", " "
         }
+
+        [PSCustomObject]@{
+            FriendlyName = $friendlyName
+            State        = $_.State.ToString()
+            StateValue   = [int]$_.State
+            Name         = $_.Name
+        }
+    }
+
+    if ($AsJSON) {
+        $capabilities | ConvertTo-Json -Depth 2
+    } else {
+        $capabilities
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDQqjL/7zAPkNLO
+# wBUUEigY3T92w/eFZK0E3q9Vu0sHU6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +260,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCC0UtSoqUx7ivRHSEt0lTb7DWxoxnOEyrj6RLhtq6nK
+# KjANBgkqhkiG9w0BAQEFAASCAYADfEzgwQ2UjF9Uknvom9J8r2lnExfKxVHL0H3j
+# kPlrmLoTTcG57+7EWu/Mpxt1hNJL8XXdnqWSF/GCevy5Ec1rY9Gt4y1E2OF07lHd
+# DE+d8VZzZWDwU8Jt7JanlLnnyI4JaGUtzDmYgAY2FF0/BTsNv7N3pIMgtahtNF3k
+# 4JChY68o06DBXpTWdS7fJr6akuCGKicXsxgckPeZfAvt2/r86gmlXmKSPsUOOOm7
+# Lco8c79QjDhl0YAGyV8uU3J4t07+BWbY+iQzQkkILdlj46BAWoXG3gShtRjom52f
+# eyeWcV/xY6zfCnZc4rBoASvArTuJG2U3+o5mOzxNN7KjECI24UfP5WvdbQ7hqXVD
+# wT65R3Gj7vE+r0KpyhRp6HebiBXuBa3FpKB+dLowLtDQeS5v2mEgS7qbH8YfCRnN
+# b/egHsccW6EWdrmccUCQfsMBdlZ+o4OzoGNLu543IaKrbVH44ZUEmyacV2AswsGF
+# ZOgS5LvTOAtuoSdqomuPn8qMt46hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUxMDNaMD8GCSqGSIb3
+# DQEJBDEyBDAHQ4oopNZhgcB0Mr3FEtAitJO6e3Cva6tPqeRETH4e2J3w5cPlG2jX
+# wXhep/UbCJUwDQYJKoZIhvcNAQEBBQAEggIAfEcCaL22RJ/ycmw5c77IRdO4d9/N
+# U0aEMhUlQ3hguH4qHwP1WGuEVdSmzuXzX/83WuHyTx2CI7nMEHm8C7YPn1HxcTi5
+# 1AZvcYN/wNrP1jPcubOMau3aHqhtBFY2YX5hPwdOx+cp+QQp04qk/L9eDtI7j9Re
+# bv0DvRwnQL+MZzUx9oWEfM/HF0OW/WH8LLy6+D7nZ1Rtn+ZyOqKhYn6PL8rZuNc4
+# vGm41rrczghjj6jMESifNIKE3JmRa69Am/UnUMxcj1CL8c0ORPPjDxEVlVwTgPmh
+# 0PP0F6TCvFBi3hWG7mSJxVKqdY7bOB1C42PLrctFnQvH1qSSgDxLycS0lrJnOqH+
+# nVzxFSHLVfXCesKkX9mkXobzcKdRE3boRY9rAtlTTAvT42LAbP5k6zO8JO12KjPF
+# LZIltit9ynkx1kOq9sCZuGJtuTbJDgHMmyJ3PDGb/PCR1Mgi6rRhi5S7RHMs+GU3
+# Niiy+okrPXv8Tl7f7ij06QGoxPqfOYFRPi0e8IrY1bFW3Iai7QiXoJLnTJnd0ALT
+# 29p2HZBkjOXoocP5ZFkuuhR+uOL0/1/eNoXOuR7gSQRq8nvdDp2yeKui9iGGy0ep
+# P7YRe63rp4KtWqNTnOyaXRNqUPhHybD1SnRfuGcRbt6UK0ZbUotOzBebZKDQgii6
+# fI0ibaaIjpg+CjI=
 # SIG # End signature block

@@ -1,123 +1,120 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Get-WindowsOptionalFeatureInventory {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+    .SYNOPSIS
+    Retrieves Windows optional feature inventory and saves it to the system inventory file
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+    This function collects information about all Windows optional features installed on the system,
+    including their current state (Enabled, Disabled, DisabledWithPayloadRemoved). The data is
+    formatted and saved to the specified inventory file for use in system reports.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .OUTPUTS
+    [System.Void]
+    This function does not return objects but saves inventory data to the specified file
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    .PARAMETER InventoryFilePath
+    The path to the system inventory JSON file where the optional feature data will be stored.
+    Default: "C:\ProgramData\SystemInventory\SystemInventory.json"
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+    .EXAMPLE
+    PS C:\> Get-WindowsOptionalFeatureInventory
+    Collects Windows optional feature information and saves it to the default inventory file
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
+    .EXAMPLE
+    PS C:\> Get-WindowsOptionalFeatureInventory -InventoryFilePath "C:\Custom\Path\Inventory.json"
+    Collects Windows optional feature information and saves it to a custom inventory file location
 
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+    .NOTES
+    Function  : Get-WindowsOptionalFeatureInventory
+    Author    : John Billekens
+    CoAuthor  : GitHub Copilot
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+    [CmdletBinding()]
+    [OutputType([System.Void])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
-        }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+    begin {
+        Write-Verbose "Starting $($MyInvocation.MyCommand)"
+        $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
     }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
+
+    process {
+        try {
+            # ===== Retrieve Windows optional features =====
+            Write-Log "Retrieving Windows optional features"
+            $inventoryResults = @(Get-WindowsOptionalFeatureOverview | ConvertTo-Hashtable)
+
+            # ===== Save Inventory =====
+            Write-Log "Saving SystemInventory..."
+
+            $inventoryData = @{}
+            # Add or update Windows Optional Features section
+            $Item = "WindowsOptionalFeatures"
+            Write-Log "Saving $Item..."
+            $inventoryData[$Item] = $inventoryResults
+            $inventoryData["$($Item)Report"] = @{
+                Order      = 5
+                Title      = "Configured Windows Optional Features"
+                Fields     = [Ordered]@{
+                    FriendlyName = "Name"
+                    State        = "State"
+                }
+                SortBy     = @("State", "FriendlyName")
+                SortOrder  = @("Descending", "Ascending")
+                Highlight  = [Ordered]@{
+                    State = "Enabled"
+                }
+                Format     = @{
+                    State = @{
+                        Enabled                    = @{
+                            color = "lightgreen"
+                        }
+                        Disabled                   = @{
+                            color = "lightblue"
+                        }
+                        DisabledWithPayloadRemoved = @{
+                            color = "lightblue"
+                        }
+                    }
+                }
+                Searchable = $true
+            }
+            $inventoryData["$($Item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+
+            Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
+
+            Write-Log "System information collection completed successfully"
+
+        } catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Error "Item not found: $($_.Exception.Message)"
+            throw
+        } catch {
+            Write-Error "An error occurred during Windows optional feature inventory collection: $($_.Exception.Message)"
+            Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
+            Write-Log "Important Error details:"
+            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+            throw
+        } finally {
+            $Script:LogFile = $null
         }
+    }
+
+    end {
+        Write-Verbose "Completed $($MyInvocation.MyCommand)"
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCalC72Ld5BLuHu
+# MtZM5nJ0MR0aRmJ9n931dh5WylVtbKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +290,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDk2sPqJTuperaFks0jhOUDtW0LBojN59apzgLEREhb
+# 9zANBgkqhkiG9w0BAQEFAASCAYArJkXFuZSYBlox0nyhvYODqYA8J9xHtwabD8QE
+# oQs9u7x5KZnYJ2ekzI3e7CcPyOQcqx176bypZvdFDUbYZlYaft5KTkPuAA9dm+4p
+# F+4p+fFydzVVzkVWQQzG9eFeOlMuda7PS+xgPrtsiyGW5AI25Ay7K2hciGEH4uqL
+# Bbo2Z8kVOl4uDi0UOuKSWGBzBJv4G4Xm5vdRTMNylzSCTeHwLLIC3MMJeaF58xLB
+# sHD1FJdhfsNdxm+u2lyj1K8wzPmC6gpC9ziDq3c0LmI5MApueDmgrJPxe2CS5siQ
+# m9RCFubRq9Pb1Xy34vw9sglErh12piiG2Wax6QPfLmRs74obi/Kl7c/MqCbWuJPa
+# LsWhAdvS7ERfsjlCcMM5m+eLBwSiCDdpwuA3bzlkMeDMHdS4P43QrhhSOzTsvn7z
+# YyhMxJxhTmXzT6Du8AV+Znl0HnkGaHHW0SJ8XOHJjzA4rWoT+lDt3vP5EWRsa4oU
+# ubg2Tr+i8BV5k5x1FIP0cTcKQHehggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUxMDZaMD8GCSqGSIb3
+# DQEJBDEyBDCkeS5ftCbAgCxkDbiVCbeunhidB8woW1flJMFSXmz390bLl6lmQI+J
+# B4ALIFr86i0wDQYJKoZIhvcNAQEBBQAEggIAwX3c5onKSAxU2QLhAn+gAPZU8tbv
+# P4q35tkFZNW7e1lgzqZwt1s0E1WQ0XhQ3emMshwyuwQhil2p7o4lofpONuPpAuCS
+# Cc1lMHbRau0BC9xPVwWBueaP6x+oq6cM4eS2lWWa92MJDhamr4U/zWP8WSN++2qG
+# zlnN4xi4HdJeAN/pcrS7zzYfYJ01ctIpaMBMvgblOOamZXO0FS9Xl7w6pJcFU1p0
+# cj2X9DXubo8HecViZ3jpVEkWKslL/1Ma9ewdUmO70UwRFUuavAbgpdHb+ZzJ21ho
+# dKGpQHzKW7wlh9yFQYFGFLYqOXc/BIzzOWDUw5+1WXzvRXFuvwpFKnf+8fG4prY0
+# rgUa8AAGdca4BYOJDJ34NRXyECz5C/LRJVDvM5/mbnha/hoh3rk3urRP+J0ZQ1kC
+# NyK5BVd17z4hkqd7EBK5C3mQPGFTvV2EZcApS1ZQwKy1iOtpSCHCdCpaGt51PDZb
+# VNm+i9nwKhjuL5aqDoj9OwNzS9kazlPCAeyFjDNoFboNEXrFzLzoLuK9CDxbNPye
+# bZAUg/++q1Gwchmy05f5zmzAzd5w9iR/WkdWVeUeI+BNZ1Li+DNVbdpzuXLfn97M
+# U1CQtxRspqXFaB+pDP9EUM6YXimknbIAe3aX9EVZav4PtlCUMInlvB6wp3BldY0J
+# W8K7kQ7yDLE2X0Y=
 # SIG # End signature block

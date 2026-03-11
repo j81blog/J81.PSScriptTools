@@ -1,123 +1,146 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Get-WindowsUpdateHistory {
     <#
         .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+            Retrieves Windows Update history with detailed information and filtering options.
 
         .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+            This function retrieves the Windows Update history using the Microsoft Update Session COM object.
+            It provides detailed information including KB articles, update categories, installation status, and
+            supports filtering options to exclude Defender and driver updates.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+        .PARAMETER First
+            Specifies the number of most recent updates to return. If not specified, all updates are returned.
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+        .PARAMETER SkipDefenderUpdates
+            Excludes Microsoft Defender updates from the results.
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+        .PARAMETER SkipDriverUpdates
+            Excludes driver updates from the results.
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
+        .OUTPUTS
+            Returns an array of objects containing the update history, including date, result, title, KB article,
+            category, description, support URL, product, update ID, and revision number.
+
+        .EXAMPLE
+            Get-WindowsUpdateHistory | ConvertTo-Csv -NoTypeInformation | Sort-Object -Property Date -Descending | out-file -FilePath "${Env:USERPROFILE}\Desktop\${Env:COMPUTERNAME} - Windows updates.csv"
+            Exports all Windows Update history to a CSV file.
+
+        .EXAMPLE
+            Get-WindowsUpdateHistory | Where {$_.Title -notlike "*KB2267602*" -and $_.Title -notlike "*KB4052623*"} | Sort-Object -Property Date -Descending | Out-GridView
+            Displays update history excluding specific KB articles in a grid view.
+
+        .EXAMPLE
+            Get-WindowsUpdateHistory -SkipDefenderUpdates -SkipDriverUpdates | Out-GridView
+            Displays update history excluding Defender and driver updates.
+
+        .EXAMPLE
+            Get-WindowsUpdateHistory -First 20 | Format-Table Date, KB, Category, Title, Result -AutoSize
+            Displays the 20 most recent updates with their category in a formatted table.
+
+        .EXAMPLE
+            Get-WindowsUpdateHistory | Group-Object Category | Select-Object Name, Count
+            Groups all updates by category and displays the count for each category.
 
         .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+            This function requires the Microsoft Update Session COM object, which is available on Windows systems with Windows Update functionality.
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
+    [CmdletBinding()]
+    param(
+        [int]$First,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
+        [switch]$SkipDefenderUpdates,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+        [switch]$SkipDriverUpdates
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
+
+
     try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
+        Write-Verbose "Querying Windows Update history..."
+        $updateSession = New-Object -ComObject 'Microsoft.Update.Session'
+        $resultCodeTable = @{
+            0 = "Not Started"
+            1 = "In Progress"
+            2 = "Succeeded"
+            3 = "Succeeded With Errors"
+            4 = "Failed"
+            5 = "Aborted"
         }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
+        $updateSearcher = $updateSession.CreateUpdateSearcher()
+        $historyCount = $updateSearcher.GetTotalHistoryCount()
+        $historyQueryResults = $updateSession.QueryHistory("", 0, $historyCount)
 
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
+        $output = @($historyQueryResults |
+                Where-Object { -not [String]::IsNullOrWhiteSpace($($_.Title)) } |
+                Select-Object @{Name = 'Date'; Expression = { $_.Date } },
+                @{Name = 'Result'; Expression = { $resultCodeTable[$_.ResultCode] } },
+                @{Name = 'Title'; Expression = { $_.Title } },
+                @{Name = 'KB'; Expression = { if ($_.Title -match 'KB(\d+)') { "KB$($matches[1])" } else { $null } } },
+                @{Name = 'Category'; Expression = {
+                        $updateClassifications = @()
+                        if ($_.Categories) {
+                            foreach ($cat in $_.Categories) {
+                                # Check various category types that might indicate update classification
+                                if ($cat.Type -eq 'UpdateClassification' -or $cat.Type -eq 'Category') {
+                                    $updateClassifications += $cat.Name
+                                }
+                            }
+                        }
+                        if ($updateClassifications.Count -gt 0) {
+                            $updateClassifications -join ', '
+                        } else {
+                            # Fallback: try to determine from title
+                            if ($_.Title -match 'Driver') { 'Driver' }
+                            elseif ($_.Description -match 'driver update') { 'Driver' }
+                            elseif ($_.Title -like '*security*update*defender*antivirus*') { 'Defender Update' }
+                            elseif ($_.Title -match 'Definition') { 'Definition Update' }
+                            elseif ($_.Title -match 'Security') { 'Security Update' }
+                            elseif ($_.Title -match 'Feature') { 'Feature Pack' }
+                            elseif ($_.Title -match 'Cumulative') { 'Cumulative Update' }
+                            else { 'Update' }
+                        }
                     }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
+                },
+                @{Name = 'Description'; Expression = { $_.Description } },
+                @{Name = 'SupportUrl'; Expression = { $_.SupportUrl } },
+                @{Name = 'Product'; Expression = {
+                        $product = $_.Categories | Where-Object { $_.Type -eq 'Product' } | Select-Object -First 1 -ExpandProperty Name
+                        if ($null -ne $product) { $product } else { "N/A" }
+                    }
+                },
+                @{Name = 'UpdateId'; Expression = { $_.UpdateIdentity.UpdateId } },
+                @{Name = 'RevisionNumber'; Expression = { $_.UpdateIdentity.RevisionNumber } } |
+                Sort-Object -Property Date -Descending
+        )
+
+        if ($SkipDefenderUpdates.IsPresent) {
+            Write-Verbose "Skipping Microsoft Defender updates..."
+            $output = $output | Where-Object { $_.Title -notmatch 'Microsoft Defender' }
         }
+        if ($SkipDriverUpdates.IsPresent) {
+            Write-Verbose "Skipping driver updates..."
+            $output = $output | Where-Object { $_.Category -notlike '*Driver*' }
+        }
+
+        # Apply First parameter if specified
+        if ($First -gt 0) {
+            $output = $output | Select-Object -First $First
+        }
+
+        Write-Output $output
+
+        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($updateSession) | Out-Null
+        Remove-Variable updateSession
     } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
-    }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
-        }
+        Write-Error "Failed to query Windows Update history: $_"
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCl+vfjDg4V/1tf
+# win1aW+sHudNmkVwkuTUad4MqV/dk6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +316,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDcKu8YBG8tqaWs7GcLJO53RUDYxhcAxyDR7RKeqO+0
+# RTANBgkqhkiG9w0BAQEFAASCAYDJSOLetya03bWxeLmlD+hRa+5iWiOzl2SCJl0n
+# 2iAv0jVgUR+82z9YVOxJIxNoaK21VaZjoxoN/crDG74wq7g794uTIqAtI73o3OaZ
+# +7FB1WBgJhf9Va6l1763BY8JbeqRPQSfYy+kH9QvwcTx1l++J+PjFMuKn2QnrEPJ
+# Hdb0UO4izZU7rLxGpAlBajtQlhcfVhZ/ol4uY/AjCTTq+38z3T7Qw92bkCZgQJG2
+# HNmc0d1cdA4TZyItDengaDNNfRqOZdviz8iEEfxW/is7B+c3JiDQZQ1fM1KWaE1/
+# rp5sVVIYxK/kKz3Ow60z+lHFa5hcmo0IudZbci3iCBc25MMX1i8H1mRRC9B09yW8
+# DIkGf26GwF1UM5gyTVIbY2CCdnPm7LNTF+JwDZ3TBs6fLB4cSOCPJNg2sRwGDzji
+# z4JxjiAJibCUyx0inzyY88vBIL3SxMFRpVB8IJsVz46iS0rUTYtS7nDo6VDeHAgt
+# pURXoIP2vKIeFc/OgV4F2+jthW+hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUxMThaMD8GCSqGSIb3
+# DQEJBDEyBDDBB3y7ne5w9+B5JJTocQymgTDqgQe1QX+pJE5ELy+aY1LsxxdxXma4
+# 1s/7nKLsS+YwDQYJKoZIhvcNAQEBBQAEggIAHukMyxsRQX0Zju19nJkEuPxwZl3k
+# vDaTUQTq/Ka05RbzgdCWk/cu4UEdefGEWPMIWAR9OUZdUfS0G6tDOSE9aKMZdswT
+# xQAM1aBFuj4rlnXAzui9m0Grxh/3zQWQblPtL8DuWltnoVE0RCkFVcXOnYg64cGh
+# hu/Jy5Mn9SHNZ51dlYIVPSJxrt7ZD4bFkP3XCKlYRcLQNo+qwltp6vHjUW8YCxTp
+# EAUBKlnqYTyeK7Ru/lf1JjE6DnoCTKG1x9ljb7IhjPRMyvZhUql6tPEW0HPrFJGB
+# h6PPHlVgl6B9AvgwCRJBoFUk11syEqCnBLLLZLz3O8KgyKHpnCToPl9iV7Dd1i0B
+# n6K1u2VDBhUyG2IrruqAh0Ed/VpyQOT1jp29rRJLi6jShbynXDrnxDN1tewd4S5e
+# olReW9P5KJv14Bl8Kp99zUVe+Wgyj4pptqiXLi/QU8d8SV/PCGm9NF8NnqwxRPVG
+# kTrDGhM+sq5wJ8WXJhmQY/XAsoZCvv//PlYZ+wA6kSvprtx0KafUbD0WfIV3bSw9
+# G9TNyiP4DhMGKWHYHKdooBI/zvyaI8pQR4NNDt7cky/4Im/6FIELA/GEdEwSk/OH
+# nSJgafjvHUjjOaojEBQ3qOUxvfGwd+XOXlirNROwI9ZfAPYpXgM2E8c1giYfQynx
+# kTCQJdrWC7bmB9c=
 # SIG # End signature block

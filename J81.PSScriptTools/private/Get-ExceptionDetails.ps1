@@ -1,123 +1,93 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Get-ExceptionDetails {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+    .SYNOPSIS
+        Extracts detailed information from a PowerShell ErrorRecord object.
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+        The Get-ExceptionDetails function processes a PowerShell ErrorRecord object
+        and extracts comprehensive error information including exception messages,
+        stack traces, location details, and nested inner exceptions. This is useful
+        for detailed error logging and debugging.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .PARAMETER ErrorRecord
+        The ErrorRecord object to extract details from. This is typically obtained
+        from $_ in a catch block or from $Error[0].
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    .PARAMETER AsText
+        If specified, returns the error details as a formatted text string instead
+        of a PSCustomObject.
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+    .EXAMPLE
+        try {
+            Get-Item "C:\NonExistent\Path" -ErrorAction Stop
+        }
+        catch {
+            $details = Get-ExceptionDetails -ErrorRecord $_
+            $details | Format-List
+        }
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
+        Captures an error and extracts detailed information from it.
 
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+    .EXAMPLE
+        $details = Get-ExceptionDetails -ErrorRecord $Error[0]
+        Write-Host "Error occurred at line $($details.LineNumber) in $($details.ScriptName)"
+
+        Processes the most recent error from the $Error automatic variable.
+
+    .OUTPUTS
+        System.Collections.Specialized.OrderedDictionary
+        Returns an ordered hashtable containing detailed error information.
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true, Position = 0)]
+        [ValidateNotNull()]
+        [System.Management.Automation.ErrorRecord]$ErrorRecord,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+        [switch]$AsText
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
+    # Recursively collect all inner exceptions
+    $innerExceptions = @()
+    $currentException = $ErrorRecord.Exception.InnerException
+    while ($null -ne $currentException) {
+        $innerExceptions += [ordered]@{
+            Message = $currentException.Message
+            Type    = $currentException.GetType().FullName
         }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+        $currentException = $currentException.InnerException
     }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
+
+    $errorDetails = [ordered]@{
+        Timestamp         = Get-Date
+        Message           = $ErrorRecord.Exception.Message
+        ExceptionType     = $ErrorRecord.Exception.GetType().FullName
+        ErrorId           = $ErrorRecord.FullyQualifiedErrorId
+        Category          = $ErrorRecord.CategoryInfo.Category
+        ScriptName        = $ErrorRecord.InvocationInfo.ScriptName
+        LineNumber        = $ErrorRecord.InvocationInfo.ScriptLineNumber
+        CharacterPosition = $ErrorRecord.InvocationInfo.OffsetInLine
+        Line              = $ErrorRecord.InvocationInfo.Line
+        PositionMessage   = $ErrorRecord.InvocationInfo.PositionMessage
+        CategoryInfo      = $ErrorRecord.CategoryInfo
+        TargetObject      = $ErrorRecord.TargetObject
+        StackTrace        = $ErrorRecord.ScriptStackTrace
+        InnerExceptions   = if ($innerExceptions.Count -gt 0) { $innerExceptions } else { $null }
+    }
+
+    if ($AsText) {
+        return ("`r`n$(( [PSCustomObject]$errorDetails | Out-String).Trim())`r`n")
     } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
-        }
+        return [PSCustomObject]$errorDetails
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCBVUQRKjyi7oNA
+# NNQIrMxteLneFfWT5/vpJ++7O7g/Z6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +263,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDDo43dfJl16FpbwjzuQNhcU58o6VWyU3qGzkxpn5bp
+# oTANBgkqhkiG9w0BAQEFAASCAYCaxiwmBkIhUORpMsmDCM5WrO065Xwk2TaGewqV
+# a3aAfYMSfXoKX9BIlU768DEOAq0allHeZqBa0GtS2syPmX9AT8ev2SyU1seOUxUz
+# MJMeWLloizdSHfEls4P9R5xRmASn9wCu8DTfDnlCt8mICWNU3YuzBEcsDi0mvTS3
+# ei6IKTyj7uSVdbi33OK9vCvS6p1x/e4e2QSvVCfeKZgE3Zciij0IQdqmpvTS+MeT
+# dWJlTu9UcwYWwjDB7xQSk5NIf85RPsanUX9Tu4JDqwORstrQMweCG8SI4PF9aaq/
+# hvoYiCldlwJjXyejc/xX6NM/HL9qEmnssXFnYOgq9pUH3bDyca3B2V6QfU2Y9EBD
+# vnotxA+lvHsZR4tO0VW+NNf34jdUqUtwm8J0DJrQYwS5RIImniB9MA1ZgY0yQAxh
+# 2jP+rNk5x8LNrgHiuHjOl7nvPsU/+/VF2bjPCrSnGLZDXaBRR5U3g9SOGNYasLlM
+# OwDtx3gYr2A8+KnY/2U1yU2JVq2hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODQ5NTFaMD8GCSqGSIb3
+# DQEJBDEyBDByPpkct7KvutZfZ/2eF+YadC0NLengkuWpTNRHFt1PV+Y5y8AANDAq
+# Fz6GB3qjJhEwDQYJKoZIhvcNAQEBBQAEggIAAko2dIZ6ZEagHu6kAYmEEvhcJeZ1
+# TRx0IxYkzndv1H4dj5Z9fYOkPlp2YlOBfUxNSfhP1midP1X+0SmR5wgmbD1TdNcc
+# 9qYpIPpvvsp+JvcLdjiwmP5xYxoGXe143+fvWwjW6zN72JFOEBu93ITxbIzbKiAw
+# nkNdYXQqDrmifeHmDfZHi6bzMElXITSDRqUrJS9H/NZr4PNeNN6pkwDvf9YNIuy4
+# rR2v0ZyycdRVj9ykiXnHQ8PNgdzksAfe3Epjz7dhDtfGRNI+SQ5jn2ygUyF+k40p
+# iaJKIUs30fT5ojyDfrKfI2CESrgliyB3NnIqyiRUuIsBhZN4VfpTSkOBx0CTrXk8
+# BG5cna3n4t48sjqf98xor1UxCS2LwiHb2cSzSwaXnbjXFwKz431Pr3NI74LIqnPU
+# ySgvIlfwzlf1kM5h//oXQjBHIHGhOnKReFhECgYO6Hw3OByCtDWkGvVcK+O6wAgr
+# eN1wMiXJdoG7mbp/7IsEUeXU1l3fegBWOxc4QGTn20Tp8qqWD4XtGegvcwFNDNVs
+# 7GLkg2AEX5wY/yvV4k8gj6BoaaGbCOAM3sFnCxt3Y5Ehaks+31gbAraS92yeZezp
+# Gbm5mtt42drIrwWk0vN3JOr8gtBO9qIaxh6MUJF+AGqQp1V4T29H4FbB8TncYiQi
+# xJtvP5KcjDmzTS4=
 # SIG # End signature block

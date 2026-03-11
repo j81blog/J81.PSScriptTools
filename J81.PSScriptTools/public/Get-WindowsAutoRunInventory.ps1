@@ -1,123 +1,141 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Get-WindowsAutoRunInventory {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+    .SYNOPSIS
+    Collects all autorun/startup applications and configurations for system inventory reporting.
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+    Retrieves comprehensive information about all autorun locations on the system and saves
+    to the system inventory JSON file. This function calls Get-WindowsAutoRunOverview to
+    gather the data and then integrates it into the inventory framework.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    Includes:
+    - Registry Run keys (HKLM and HKCU, including RunOnce and Policy Run keys)
+    - Startup folders (All Users and Current User)
+    - Scheduled tasks configured to run at startup/logon
+    - Services set to automatic start
+    - Active Setup registry entries
+    - Winlogon registry keys (Userinit, Shell, VmApplet, AppSetup, System)
+    - BootExecute registry entries
+    - Group Policy startup/shutdown/logon/logoff scripts
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    .OUTPUTS
+    [PSCustomObject]
+    Returns autorun inventory data integrated into the system inventory framework
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+    .PARAMETER InventoryFilePath
+    Full path to the system inventory JSON file where the autorun data will be stored.
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
+    .PARAMETER IncludeServices
+    Include Windows Services that are set to Automatic start. Default is $false to reduce data volume.
 
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+    .PARAMETER IncludeScheduledTasks
+    Include Scheduled Tasks that run at startup or logon. Default is $true.
+
+    .EXAMPLE
+    PS C:\> Get-WindowsAutoRunInventory
+    Collects all autorun entries and saves to the default inventory location
+
+    .EXAMPLE
+    PS C:\> Get-WindowsAutoRunInventory -IncludeServices
+    Includes Windows Services set to automatic start in the inventory
+
+    .EXAMPLE
+    PS C:\> Get-WindowsAutoRunInventory -InventoryFilePath "C:\Custom\Path\Inventory.json"
+    Saves autorun inventory to a custom location
+
+    .NOTES
+    Function  : Get-WindowsAutoRunInventory
+    Author    : John Billekens
+    CoAuthor  : GitHub Copilot
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1116.1200
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json",
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
+        [Parameter(Mandatory = $false)]
+        [switch]$IncludeServices = $false,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+        [Parameter(Mandatory = $false)]
+        [switch]$IncludeScheduledTasks = $true
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
-        }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+    begin {
+        Write-Verbose "Starting $($MyInvocation.MyCommand)"
+        $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
     }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
+
+    process {
+        try {
+            # Call Get-WindowsAutoRunOverview to collect all autorun data
+            Write-Log "Retrieving autorun entries from system"
+            $autoRunOverview = Get-WindowsAutoRunOverview -IncludeServices:$IncludeServices -IncludeScheduledTasks:$IncludeScheduledTasks
+
+            # Convert PSCustomObject array to hashtable array for inventory storage
+            $inventoryResults = @()
+            foreach ($entry in $autoRunOverview) {
+                $inventoryResults += @{
+                    Name         = $entry.Name
+                    Command      = $entry.Command
+                    Location     = $entry.Location
+                    RegistryPath = $entry.RegistryPath
+                    Scope        = $entry.Scope
+                    Type         = $entry.Type
+                    Category     = $entry.Category
+                }
+            }
+
+            # Save Inventory
+            Write-Log "Saving autorun inventory..."
+
+            $inventoryData = @{}
+            $item = "AutoRun"
+            Write-Log "Saving $item with $($inventoryResults.Count) entries..."
+            $inventoryData[$item] = $inventoryResults
+            $inventoryData["$($item)Report"] = @{
+                Order        = 8
+                Title        = "AutoRun Applications and Tasks"
+                Fields       = [Ordered]@{
+                    Name     = "Name"
+                    Command  = "Command"
+                    Type     = "Type"
+                    Scope    = "Scope"
+                    Category = "Category"
+                }
+                SortBy       = @("Category", "Type", "Name")
+                SortOrder    = @("Ascending", "Ascending", "Ascending")
+                Highlight    = @{}
+                Searchable   = $true
+            }
+            $inventoryData["$($item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+
+            Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $item
+
+            Write-Log "AutoRun inventory collection completed successfully. Collected $($inventoryResults.Count) entries."
+        } catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Log "Inventory file path not found: $($_.Exception.Message)" -Level "ERROR"
+        } catch {
+            Write-Log "Important Error details:"
+            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+            Write-Log "An error occurred during autorun inventory collection: $($_.Exception.Message)" -Level "ERROR"
         }
+    }
+
+    end {
+        Write-Verbose "Completed $($MyInvocation.MyCommand)"
+        $Script:LogFile = $null
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCqffHGpVlze/8P
+# nDAwDSdJO+DRn+Ex+vTooKfHpOtikqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +311,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCBh7BqfCZo8DxGex3p7BNkatmKf7dP/9CCpW7TUBatf
+# VzANBgkqhkiG9w0BAQEFAASCAYBw7rGKsUac/tUeYaTTWBfnrPSANQUHL/SO760/
+# FuECznwo2z7aOaBO6h03MU3F0ae2HTQgF3radk8EUkQdsVak8WPiag6O7Np4A33o
+# pkdJNfsUF6xiEEK1PGUtDrKgeCUrSSsbGW3fOPro9A0iP1Cj7WrDmafo6mVRojjS
+# s7O7oZx7IsE0I8uVurZMdaF5DX/HHniVWDVHnEZbq7hS4+vT1cGC7O9rVXzBpXh+
+# c3b5l6J+5MK/2d9nSz03GGpYe3gbxuxriMAN0zCFAa1qvne8dr9kAgfty6PyRWM4
+# kEoPU7m9Wt8mdJ3Iewd8D7cx3FvByleRFRPqwDRD53neAAGgddbuRB5sAlsgx33L
+# n03RWd7NxC+Yc261RfIGqv/O968HvzoD/zAIM7jJ800SbCVnpu3XWJZJGclHXpEj
+# L2J8iPdBcuKHGwFD7NPFgjNAJoxIHbrchXr6uMi4JNMzA9YUopw0g5syLdD7M1l3
+# BfNP/0y2yH5pdewb7pq5qv+JDCOhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwNTRaMD8GCSqGSIb3
+# DQEJBDEyBDAOtpGaRh8gnpPNPQ677Tsm4m0gKM7xPVMlofwNuhmqWQ0jLp4oDZZu
+# H5OcEyEPjDkwDQYJKoZIhvcNAQEBBQAEggIAMAFBwGmjjE9J7pEV3mToJzuJlHu0
+# cm/WG2C660qbFMqbJ3iSzlPBNzCIf2N6L+Ufy9qYe01AVWVRnkOMU7+/YNqnsIHX
+# 0mvRvAX4u6sfLcYas3RvWnMjVpyuKWS1ttfcRAYMfb3GFjpB1qg7f27yuoSyQkLH
+# 9fizKF6iPfz2vESB94XhJf7jSc3qMtwQTUVYm5IqIc6wJBACC6cSX4l8d5Km8Nc9
+# cS45aEgP4W31Qa59DcsuH3hZdX9C//KTIHnPK3H7FwEBiQ6KYU9J5fjK7Qd6kQGI
+# TU1cgnbnsdaJCwYu6fZeLpmOjolHQIKEG5V0LFS7+s5W7cXmzmgxnEg7LGuU9STv
+# QEibm7q2qyx7phM9YVkZ23DpF3hxFpn6rbM9pBCLUQHGFpj7tAqAQkkzR+9pMkya
+# MZJDKFK06lvGM93RylqU0h55SjZuB+bkj3uLTeZqDNwf1morg8YB7Df4pVtLEzzT
+# F4C/pN+tthYtkwuM9tEpOKhqR4HfOPI+MXQ6Ifxya9fiulGZ3If+k9L+E1nN/FDq
+# CToalUT497y0Nelo5KEklvNoJvXrjbeHtETz+F3azvRFB3VRk7WTO2jQ7RMTyh70
+# I7113s5TwNRFm8S1ZVX7CrL23pPe45MZhuH8a5a9mVaTsSHz1Osa+yr/yK9A4nx8
+# T5GmOq/GG9PYtMA=
 # SIG # End signature block

@@ -1,123 +1,135 @@
-﻿function Get-GitHubCommitDescriptionByName {
-    <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+﻿function Format-SystemInfoHtml {
+    param($SystemInfo)
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    $html = ""
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
-
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
-
-        .PARAMETER Repository
-            The name of the GitHub repository.
-
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
-
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
-    #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
-    )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
-
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
-        }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+    if (-not $SystemInfo) {
+        return "<p><em>System information not available</em></p>"
     }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
+
+    # OS Information
+    $html += @"
+<div class="section">
+    <h3>Operating System</h3>
+    <table class="info-table">
+        <tr><th>Edition</th><td>$($SystemInfo.OS.Edition)</td></tr>
+        <tr><th>Version</th><td>$($SystemInfo.OS.Version)</td></tr>
+        <tr><th>Build Number</th><td>$($SystemInfo.OS.BuildNumber)</td></tr>
+        <tr><th>Architecture</th><td>$($SystemInfo.OS.Architecture)</td></tr>
+        <tr><th>Domain</th><td>$($SystemInfo.OS.Domain)</td></tr>
+    </table>
+</div>
+
+"@
+
+    # Hardware Information
+    $html += @"
+<div class="section">
+    <h3>Hardware</h3>
+    <table class="info-table">
+        <tr><th>C: Drive Total</th><td>$($SystemInfo.Hardware.CDrive.TotalSizeGB) GB</td></tr>
+        <tr><th>C: Drive Used</th><td>$($SystemInfo.Hardware.CDrive.UsedSpaceGB) GB</td></tr>
+        <tr><th>C: Drive Free</th><td>$($SystemInfo.Hardware.CDrive.FreeSpaceGB) GB ($($SystemInfo.Hardware.CDrive.PercentFree)%)</td></tr>
+
+"@
+
+    if ($SystemInfo.Hardware.NvidiaGPU) {
+        $html += @"
+        <tr><th>NVIDIA GPU</th><td>$($SystemInfo.Hardware.NvidiaGPU.Name)</td></tr>
+        <tr><th>GPU Memory</th><td>$($SystemInfo.Hardware.NvidiaGPU.AdapterRAM_GB) GB</td></tr>
+"@
+        if ($SystemInfo.Hardware.NvidiaGPU.DriverBranch) {
+            $html += @"
+        <tr><th>GPU Software/Driver Version</th><td>$($SystemInfo.Hardware.NvidiaGPU.SoftwareVersion)</td></tr>
+        <tr><th>GPU Software Release Branch</th><td>$($SystemInfo.Hardware.NvidiaGPU.SoftwareReleaseBranch)</td></tr>
+        <tr><th>GPU Driver Branch</th><td>$($SystemInfo.Hardware.NvidiaGPU.DriverBranch)</td></tr>
+        <tr><th>Software Release</th><td>$($SystemInfo.Hardware.NvidiaGPU.BranchType)</td></tr>
+        <tr><th>Release Date</th><td>$($SystemInfo.Hardware.NvidiaGPU.ReleaseDate)</td></tr>
+        <tr><th>EOL Date</th><td>$($SystemInfo.Hardware.NvidiaGPU.EOLDate)</td></tr>
+"@
+        }
+    }
+
+    $html += "    </table>`n</div>`n`n"
+
+    # Network Information
+    $html += "<div class=`"section`">`n    <h3>Network Adapters</h3>`n"
+
+    if ($SystemInfo.Network.Adapters -and $SystemInfo.Network.Adapters.Count -gt 0) {
+        $html += @"
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Description</th>
+                <th>MAC Address</th>
+                <th>IP Address</th>
+                <th>Link Speed</th>
+            </tr>
+        </thead>
+        <tbody>
+
+"@
+
+        foreach ($adapter in $SystemInfo.Network.Adapters) {
+            $html += @"
+            <tr>
+                <td>$($adapter.Name)</td>
+                <td>$($adapter.Description)</td>
+                <td>$($adapter.MACAddress)</td>
+                <td>$($adapter.IPAddress)</td>
+                <td>$($adapter.LinkSpeed)</td>
+            </tr>
+
+"@
+        }
+
+        $html += "        </tbody>`n    </table>`n"
     } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
+        $html += "    <p><em>No network adapter information available</em></p>`n"
+    }
+
+    $html += "</div>`n`n"
+
+    # Security Information
+    $html += @"
+<div class="section">
+    <h3>Security</h3>
+    <table class="info-table">
+
+"@
+
+    if ($SystemInfo.Security.WindowsDefender) {
+        $html += "        <tr><th>Windows Defender Enabled</th><td>$($SystemInfo.Security.WindowsDefender.AntivirusEnabled)</td></tr>`n"
+        $html += "        <tr><th>Real-Time Protection</th><td>$($SystemInfo.Security.WindowsDefender.RealTimeProtectionEnabled)</td></tr>`n"
+        if ($SystemInfo.Security.WindowsDefender.AntivirusSignatureVersion) {
+            $html += "        <tr><th>Signature Version</th><td>$($SystemInfo.Security.WindowsDefender.AntivirusSignatureVersion)</td></tr>`n"
         }
     }
+
+    if ($SystemInfo.Security.Firewall) {
+        $html += "        <tr><th>Firewall (Domain)</th><td>$($SystemInfo.Security.Firewall.DomainProfile)</td></tr>`n"
+        $html += "        <tr><th>Firewall (Private)</th><td>$($SystemInfo.Security.Firewall.PrivateProfile)</td></tr>`n"
+        $html += "        <tr><th>Firewall (Public)</th><td>$($SystemInfo.Security.Firewall.PublicProfile)</td></tr>`n"
+    }
+
+    if ($SystemInfo.Security.TPM) {
+        $html += "        <tr><th>TPM Present</th><td>$($SystemInfo.Security.TPM.Present)</td></tr>`n"
+        if ($SystemInfo.Security.TPM.Version) {
+            $html += "        <tr><th>TPM Version</th><td>$($SystemInfo.Security.TPM.Version)</td></tr>`n"
+        }
+    }
+
+    $html += "    </table>`n</div>`n`n"
+
+    return $html
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBHLI4MlhRcZ15k
+# 4qN24EwF87WXg2POoGgZ5sLpD7rhdaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +305,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCrFv9xpZkcZPIthwn6MuUNq27FKcz1ZUpdymbvuIVB
+# WjANBgkqhkiG9w0BAQEFAASCAYAaJUTN9VOy7eJnft8KmtrsTCCKu1WgVbAICz5M
+# phXDz4JNUzAwAEB9dLPw0UNPrLKEct772rtWe181L2Ri0i2NZU1gcVZ0P2Eg1+Wx
+# FUTWK993tir5nh1/tedJfqgtIAOCr5H5kPgKhECDe01ub3hU4XTVnkIYSg41p7+I
+# t0d6iN2Wo4tyz3GCs3N/JeYM5oPXuGl/rm0U+m8RV0zsEv8nic6RcqPq/an3l3C7
+# vZq7yEHOO27VKhMi9jTg7u+6aTR0GmLcaeUgwChxV4ZG3FXW0xfTWZY5OpgrHrIK
+# o7fa09rdfb+pvldBrzTk14mFWBMvL2kXmSvCjeuVBUSKpc3haCJKQt7U9Tvh2vl3
+# tIGmCVD4cb0Zn1sODHjERUMLTyJIg9IpTDO2TukW9oB+sy9QSDuTmfUAfPVD2qMC
+# nPC9NpSYzzLYntra1zv52Qg7P/naxqQ8LUMev0ZXuqoGeA+fLDlB1vF0SMH03QCR
+# hRjjdS1LaXuD0OrtfxSnr0PJjcKhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODQ5MzlaMD8GCSqGSIb3
+# DQEJBDEyBDC8eHTHwf+KIYExpzPgG2OHoffzHB0lhNDTBw90OadDCs4H/p/zyC3w
+# kjU/0GtV9BcwDQYJKoZIhvcNAQEBBQAEggIAResqgW7qxiU16jJqDKmg2Mi70wHa
+# syHlDf8kdbwQLqDr4znLzkfI6aqjEjZQHOL229HcuGsxCTiQ8MvkgdBI4KoEjoLy
+# 1/U4zevt0xFXhhqbCogjJFWbuisETRx5i8M1I46q6rsnQJ3YNP748IBriiIXlIFg
+# VNiNy6k/PdAw29nnmhaxlNgXWoq8HHTGKoiZs804BqqAnGtMMcLg0dbX9B5okrty
+# wbFBRW85poj7uLYEUqW5t1OW1EKWnfJ2C2vREggKK6JKwfme0Eew3QIl8pKvJhi0
+# slCLvrtpPSbyY7RvHhT5PsjnCskqLnhWVADHaFxOD7Wg17kkiB/X1FwwsMdUcrhc
+# 99iE2vaSfmyIwBOfk6IunDX9QYB6hVSPvFhJZYcUTULvRUjIoNbI0zmZx1j5y9If
+# DRwCrVMS/z9KUxdPYlMPdVCBxHsoR+nFmHubxuUoM2fQhNQVsNlOXZFBEx80dMGz
+# yc0Z6kEEVbKALHC17Ih9rm3rItyZHAfXABQ3qyi9KmoGClD9PPAT0iklLQs36KVn
+# 0N3+3ewgD8lut23E7GNTh7LKTIURbxp30OxtaiavcpYCJ4g5mPTCN2PZYBZ0ynIt
+# X8uOic0gZkuK5Krk5hiKeaEXLgkWmSuy8To7uxiG51SzyyxxwjtTwYu8kGj8/r8v
+# iLerEFQyxD4N/vs=
 # SIG # End signature block

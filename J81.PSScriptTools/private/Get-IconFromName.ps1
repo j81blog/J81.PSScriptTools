@@ -1,123 +1,96 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿# Define icon mappings at script scope for better performance
+# Using Unicode code points to avoid encoding issues in PowerShell 5.1
+$Script:IconMapUnicode = @{
+    "Success"                    = [char]::ConvertFromUtf32(0x2705)  # ✅
+    "Succeeded"                  = [char]::ConvertFromUtf32(0x2705)  # ✅
+    "Installed"                  = [char]::ConvertFromUtf32(0x2705)  # ✅
+    "Enabled"                    = [char]::ConvertFromUtf32(0x2705)  # ✅
+    "Failed"                     = [char]::ConvertFromUtf32(0x274C)  # ❌
+    "Disabled"                   = [char]::ConvertFromUtf32(0x1F6AB) # 🚫
+    "DisabledWithPayloadRemoved" = [char]::ConvertFromUtf32(0x1F6AB) # 🚫
+    "NotPresent"                 = [char]::ConvertFromUtf32(0x2796)  # ➖
+    "Paused"                     = [char]::ConvertFromUtf32(0x23F8)  # ⏸️
+    "Error"                      = [char]::ConvertFromUtf32(0x274C)  # ❌
+}
+
+$Script:IconMapHTML = @{
+    "Success"                    = "&#9989;"
+    "Succeeded"                  = "&#9989;"
+    "Installed"                  = "&#9989;"
+    "Enabled"                    = "&#9989;"
+    "Failed"                     = "&#10060;"
+    "Disabled"                   = "&#128683;"
+    "DisabledWithPayloadRemoved" = "&#128683;"
+    "NotPresent"                 = "&#10134;"
+    "Paused"                     = "&#9208;"
+    "Error"                      = "&#10060;"
+}
+
+function Get-IconFromName {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+    .SYNOPSIS
+        Converts an icon name to its corresponding emoji character.
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+        This function maps predefined icon names to their Unicode emoji characters.
+        Used for formatting inventory reports with visual status indicators.
+        Returns an empty string if the icon name is invalid or not found.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .PARAMETER IconName
+        The name of the icon to retrieve. Valid values:
+        - Success: ✅
+        - Failed: 🚫
+        - Disabled: 🚫
+        - NotPresent: ➖
+        - Paused: ⏸️
+        - Error: ❌
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    .PARAMETER HTML
+        Switch to return HTML entity codes instead of Unicode characters.
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+    .EXAMPLE
+        Get-IconFromName -IconName "Success"
+        Returns: ✅
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
-
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+    .EXAMPLE
+        Get-IconFromName -IconName "InvalidName"
+        Returns: "" (empty string)
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
+    [CmdletBinding()]
+    [OutputType([string])]
     param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
+        [string]$IconName,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+        [switch]$HTML
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
-        }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+    # Return empty string for null/whitespace input
+    if ([string]::IsNullOrWhiteSpace($IconName)) {
+        return ""
     }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
+
+    # Select appropriate icon map based on output format
+    if ($HTML.IsPresent) {
+        $iconMap = $Script:IconMapHTML
     } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
-        }
+        $iconMap = $Script:IconMapUnicode
     }
+
+    # Return icon if found, otherwise empty string
+    if ($iconMap.ContainsKey($IconName)) {
+        return $iconMap[$IconName]
+    }
+
+    return ""
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAEmiFIoDGxisId
+# bwNKiC+byXSXDVRwNVMP2PskPZLep6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +266,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCD1iA7548bPvTxKvs8TZgeKgDDJtVKBFp2alJBe5NB+
+# uDANBgkqhkiG9w0BAQEFAASCAYCx6ownjqCPQ+SVREVkOjQsKEwQB5FBFw6P4zTs
+# K97evAXgjZJn5hmhyPA1lRM1MI7FrJRKtAld1gdLnqZBY8P/OHlToXtb+skXyWDv
+# ePtGJpCI9Sn2iSPhnhpcnxEg0otDoFpwilu2xBZWnOxgAdQXMl51otDq54xjToSr
+# wbqjX/B2s6JMhNxA6/byk0pryGJ7Y25qYWj0gNcA6RNVON0dgVVjCnsS2gd/Bl3r
+# SS4AC0soaijLvl4kRQLzJA6sGSj4UelyHEv0PmwcX+ZGW+uUyK4hNIvCjleDyOSb
+# 7BcgiqVYT9Gd1RP8ElfoEw6uICSYOu9spj2hCzvVO59//rVpUqFBCtU1E0g9z3Iw
+# TwKpnBcieB3JSOxRgjyhcMU9lgswCMrCFdJ/Xi7wZLrxzNTK5ayIdHAN7XgkWrMg
+# /BsnS4XyEafpsgC9/Mf0S3bGXAVbeibyWs96DnWkIGtrrcnVs5I6AqTNF4AAk6M7
+# BgJ2udIZtFJSPRxMewDtzTfwwXmhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODQ5NTRaMD8GCSqGSIb3
+# DQEJBDEyBDAFAffiSGiXdbZpqN2UGJJ2st+M5gIwzn7sJWDNgkjzhuTdN8Yxyk3U
+# LctRi0TAk44wDQYJKoZIhvcNAQEBBQAEggIAcI1HinMtj0/p+VzpYPtC/JQDxdWZ
+# BNclizSdjjnJDkVIB08I6mAAF3l2PpBf2ozQCfmzUuqr0Tpq2Nesz3Br/nOY9IRt
+# cWyUHDvSqNKXZxGhomyduJ25s09SUFxv0S7kg+Es/j87wfFH2WhdtSuSUCaF1Rwu
+# 9IAvwmKeEZFraRD58mLKgMAQ1/NT6DSIoLW4N4e+Ir9KPvEJxtG7pkS/bYagd7Xn
+# Fh97lzj3E6gDcXntR74uX/VDW/V7QPeyRvNKwj8qKILyzWNed9iybK1i/dH0YBJs
+# V3WvElAY0K3pS3a2Obwz2kA2OqIT60m8P3pgr9k6yNYHu6zLcsoZse6XsyURSRNH
+# 9j2XiPjaMKdTk3cQX1mxyoIJLC9yW88Q61zSgrLXKp6hnXLeu4+n7Oo11nzc/4sD
+# arAFmb9/Fel9L0UzvS4IUcQtnaOdt5g3LZ1VtcvGfAd8y0LrL0O4CJFKr/ks3UZr
+# 08u96LUT/hTaYLlyCZqHhBAAMIf4tGkdZkyFwm4fJESF1a1S5krS+B9juU1cgg4b
+# MI+XrI1kc8fX6nnZ6Tbv+RT9UZVVvsDYKcVTL//h6soZfXEIKpZC+4wLSGv9T9Hr
+# 5FyZh2ZTSD2QbZdLmbMeigXPEMXSncrHtOZwhzbxkQnHnkMeJVWO0KwCOhAqnCXY
+# /QUtJAVkW+6W32U=
 # SIG # End signature block

@@ -1,123 +1,146 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Get-WindowsStoreAppsInventory {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+    .SYNOPSIS
+    Retrieves Windows Store apps and MSIX package inventory and saves it to the system inventory file
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+    This function collects information about all Windows Store apps and MSIX packages installed
+    on the system, including apps for all users and provisioned apps. The data is formatted and
+    saved to the specified inventory file for use in system reports. The function supports
+    different scopes (AllUsers, CurrentUser, Provisioned) and can optionally include framework
+    packages in the inventory.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .OUTPUTS
+    [System.Void]
+    This function does not return objects but saves inventory data to the specified file
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    .PARAMETER InventoryFilePath
+    The path to the system inventory JSON file where the Store apps data will be stored.
+    Default: "C:\ProgramData\SystemInventory\SystemInventory.json"
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+    .PARAMETER Scope
+    Specifies the scope of apps to inventory. Valid values:
+    - 'AllUsers': All apps installed for any user on the system (default)
+    - 'CurrentUser': Apps installed only for the current user
+    - 'Provisioned': Apps provisioned for new user accounts
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
+    .PARAMETER IncludeFrameworks
+    Include framework packages in the inventory. By default, frameworks are excluded to
+    focus on user-installed applications.
 
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+    .EXAMPLE
+    PS C:\> Get-WindowsStoreAppsInventory
+    Collects all Store apps and MSIX packages (all users + provisioned) and saves to default location
+
+    .EXAMPLE
+    PS C:\> Get-WindowsStoreAppsInventory -InventoryFilePath "C:\Custom\Path\Inventory.json"
+    Collects Windows Store apps information and saves it to a custom inventory file location
+
+    .EXAMPLE
+    PS C:\> Get-WindowsStoreAppsInventory -Scope CurrentUser -IncludeFrameworks
+    Collects only current user apps including framework packages
+
+    .EXAMPLE
+    PS C:\> Get-WindowsStoreAppsInventory -Scope Provisioned
+    Collects only provisioned apps (staged for new users)
+
+    .NOTES
+    Function  : Get-WindowsStoreAppsInventory
+    Author    : John Billekens
+    CoAuthor  : GitHub Copilot
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
+    [CmdletBinding()]
+    [OutputType([System.Void])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json",
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('AllUsers', 'CurrentUser', 'Provisioned')]
+        [string]$Scope = 'AllUsers',
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+        [Parameter(Mandatory = $false)]
+        [switch]$IncludeFrameworks
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
-        }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+    begin {
+        Write-Verbose "Starting $($MyInvocation.MyCommand)"
+        $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
     }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
+
+    process {
+        try {
+            # ===== Retrieve Windows Store Apps =====
+            Write-Log "Retrieving Windows Store Apps (Scope: $Scope)"
+
+            $overviewParams = @{
+                Scope = $Scope
+            }
+
+            if ($IncludeFrameworks) {
+                $overviewParams['IncludeFrameworks'] = $true
+            }
+
+            $inventoryResults = @(Get-WindowsStoreAppsOverview @overviewParams | ConvertTo-Hashtable)
+
+            Write-Log "Retrieved $($inventoryResults.Count) Store apps"
+
+            # ===== Save Inventory =====
+            Write-Log "Saving SystemInventory..."
+
+            $inventoryData = @{}
+            # Add or update Windows Store Apps section
+            $Item = "WindowsStoreApps"
+            Write-Log "Saving $Item..."
+            $inventoryData[$Item] = $inventoryResults
+            $inventoryData["$($Item)Report"] = [Ordered]@{
+                Order      = 6
+                Title      = "Installed Windows Store Apps and MSIX Packages"
+                Fields     = [Ordered]@{
+                    DisplayName  = "Name"
+                    Version      = "Version"
+                    Publisher    = "Publisher"
+                    Architecture = "Architecture"
+                }
+                SortBy     = @("DisplayName")
+                SortOrder  = @("Ascending")
+                Highlight  = @{}
+                Searchable = $true
+            }
+            $inventoryData["$($Item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+
+            Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
+
+            Write-Log "Windows Store Apps inventory collection completed successfully"
+            Write-Log "Inventory saved to: $InventoryFilePath"
+
+        } catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Error "Item not found: $($_.Exception.Message)"
+            throw
+        } catch {
+            Write-Error "An error occurred during Windows Store apps inventory collection: $($_.Exception.Message)"
+            Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
+            Write-Log "Important Error details:"
+            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+            throw
+        } finally {
+            $Script:LogFile = $null
         }
+    }
+
+    end {
+        Write-Verbose "Completed $($MyInvocation.MyCommand)"
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBiYYdDg//BcFp3
+# TvgTQs5zWiLuej3SLnpFTW8Uas6cUaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +316,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCBOTGwzICxnHECRDZhtgNQxIZ6+9sUtFs+jK1EOcT1a
+# 3jANBgkqhkiG9w0BAQEFAASCAYCQ0LkEqmhYJ2WvDz8pC+cJ4knC8Z9gnCJD5Fn/
+# 1+AKRGOXnc1ut7NHOIe+SXKyBdbyUu7/aiw/epwepGPq/Iyz/gFwF5P/xvmvqraG
+# DGdqMTycTBKxe+Z6aLVXabnSqYio6+wvmRHeMA/roRUvEJU/QlLxoZpunMVQJIwl
+# h3oKNgK4zk1rV22IiRk3fuqmWF3TBluOBkExobGrZhSuHEXFQmGkdGVO0hjNor6k
+# 02j8nUSf8Zgy13dKO6V8JJgy7j8ccFwW5X9KRiuBx7K/aq3bEzuZpSjYW6vbZqTP
+# VuMGEsge63i1cYQvzfXNgSMHGdyzrRL/mb5iUoJHIQRiHjg0Bfs0eR3c9VxMQzvf
+# MZ1SuI6hIrTv0IiaAr6ez3C9mFRhijOlfga1i69XlHW3RJC+tTVaKXqEFXEetzdd
+# FT0nl9h2vrgvXMhJyGEC6+6oxo3Tp+9eqkuzyVMcrK5cDGZUy2Zt4UitHwdZGogz
+# X/vqUQTOKuZPAzyFj8wPB1QQmlKhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUxMTJaMD8GCSqGSIb3
+# DQEJBDEyBDAgv9vHsxUm8seVvtcSgWpW5HOY+eQsOnf90x+zybCSWlQRjcPsqlkI
+# oC3SSNaH4NAwDQYJKoZIhvcNAQEBBQAEggIAHxJFNVdMw9BD1uAh12hUB08X7d+0
+# Kx8hUcY0617aVwledZICjV0ZN8r7PAdooCof3TAMZR3PniAn5Hp7c4nefsVb7c59
+# kCYB5po/OCKCdY4hg0yyOWZAe3Hwt6UCQHYd1iMWfnPdFIG/33C79eJuo9sR+DEF
+# dtmzPJ4FwwcqJStS2IqJMJCvpkcroS/Pr8zzwBtBTMY4yEBbehQMTy2FCJUHCuye
+# cv1M5QTEnWa2yqmi50HSpjk6OwxHF2sjEkZFG5CI9nPdpXaiYH0vLdQm+2LkVcta
+# JSn87c5c3tmca8Oz9E2MDfqtQUzTz5OR+FrL0JkcDBkExVnF+zRFGG5Lc/lpjmfT
+# lk1lSNSXtrgb6jj7f2ekG6bW7l5aNjOWcUdP83/ACZRG1aBLBupfVvzbyf4oHwxK
+# 7LdU3AQLpzC++HwbdB0dOKIqW/54dRP4A1uh+NH0klKT5TMN0F/+LEYobHNU1gNS
+# sfSm7kZO45qxScUUIcYEiUBRpWmHEtovk/zEXijWmwCI2pLC6vdRz4E5/XEjqd9d
+# 1lbAvCKmEP1f9s3r/4G7bc+8hZIQwPeT2FL6s9LkowgXDWVShY8z/YLpnhYaX7Rq
+# 3VdcrZJ7NodQjCwLynnNZomxc+VwJPdjbyHKWohXh0jbAKilZEmM8dHjK3M/p5Ok
+# zfRXNaFwVLlJp2A=
 # SIG # End signature block

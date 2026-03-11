@@ -1,123 +1,101 @@
-﻿function Get-GitHubCommitDescriptionByName {
-    <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+﻿function Get-EnhancedPackageDetails {
+    param($Package, $AppType, $ScopeValue, $IsProvisionedValue = $false)
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
-
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
-
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
-
-        .PARAMETER Repository
-            The name of the GitHub repository.
-
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
-
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
-    #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
-    )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
     try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
+        # Initialize with package data
+        $applicationDisplayName = $Package.Name
+        $publisherDisplayName = $Package.Publisher
+
+        # Try to read AppxManifest.xml for better display names
+        try {
+            $installLocation = "$($Package.InstallLocation)"
+            $installLocation = $installLocation -replace '^%SYSTEMDRIVE%', $env:SystemDrive
+
+            if (-not [string]::IsNullOrWhiteSpace($installLocation)) {
+                $manifestFilename = Join-Path -Path $installLocation -ChildPath "AppxManifest.xml"
+
+                if (Test-Path -Path $manifestFilename) {
+                    Write-Verbose "Processing manifest for $($Package.Name) at `"$manifestFilename`""
+                    [xml]$manifest = Get-Content -Path $manifestFilename -ErrorAction SilentlyContinue
+
+                    if ($null -ne $manifest) {
+                        # Handle Bundle vs Package manifests
+                        if ($manifest | Get-Member -Name Bundle -ErrorAction SilentlyContinue) {
+                            $applicationDisplayName = $manifest.Bundle.Identity.Name
+                            $publisherDisplayName = $manifest.Bundle.Identity.Publisher
+                        } elseif ($manifest | Get-Member -Name Package -ErrorAction SilentlyContinue) {
+                            $applicationDisplayName = $manifest.Package.Identity.Name
+                            $publisherDisplayName = $manifest.Package.Identity.Publisher
+                        } else {
+                            Write-Verbose "Warning: Unknown manifest structure for $($Package.Name)"
+                        }
+                    }
+                } else {
+                    Write-Verbose "Manifest not found for $($Package.Name) at `"$manifestFilename`""
+                }
+            }
+        } catch {
+            Write-Verbose "Could not read manifest for $($Package.Name): $($_.Exception.Message)"
         }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
+        # Clean up the display name
+        $applicationDisplayName = $applicationDisplayName | Split-NameOnCapital -DotsToSpaces
+        $applicationDisplayName = $applicationDisplayName -replace "Language Experience Pack", "Language Experience Pack "
 
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
+        # Clean up publisher name
+        if ($publisherDisplayName -like "CN=*") {
+            $publisherDisplayName = "$($publisherDisplayName.Split("=")[1])".Split(",")[0]
+        }
+
+        # If publisher is a GUID, use the first word of the app name
+        if ($publisherDisplayName | Test-IsGUID) {
+            $publisherDisplayName = $applicationDisplayName.Split(" ")[0]
+        }
+
+        # Convert architecture if needed
+        $architecture = $Package.Architecture
+        if ($architecture -is [uint32] -or $architecture -is [Windows.System.ProcessorArchitecture]) {
+            $architecture = Convert-AppxArchitecture -Value $architecture
         } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
+            $architecture = $architecture.ToString()
+        }
+
+        # Build the enhanced object
+        return [PSCustomObject]@{
+            Name                   = $Package.Name
+            DisplayName            = $applicationDisplayName
+            Publisher              = $publisherDisplayName
+            PublisherId            = if ($Package.PublisherId) { $Package.PublisherId } else { "N/A" }
+            Version                = if ($Package.Version) { $Package.Version.ToString() } else { "N/A" }
+            Architecture           = $architecture
+            ResourceId             = if ($Package.ResourceId) { $Package.ResourceId } else { "N/A" }
+            PackageFullName        = $Package.PackageFullName
+            PackageFamilyName      = $Package.PackageFamilyName
+            InstallLocation        = $Package.InstallLocation
+            IsFramework            = if ($null -ne $Package.IsFramework) { $Package.IsFramework } else { $false }
+            IsBundle               = if ($null -ne $Package.IsBundle) { $Package.IsBundle } else { $false }
+            IsDevelopmentMode      = if ($null -ne $Package.IsDevelopmentMode) { $Package.IsDevelopmentMode } else { $false }
+            IsResourcePackage      = if ($null -ne $Package.IsResourcePackage) { $Package.IsResourcePackage } else { $false }
+            NonRemovable           = if ($null -ne $Package.NonRemovable) { $Package.NonRemovable } else { $false }
+            SignatureKind          = if ($Package.SignatureKind) { $Package.SignatureKind } else { "N/A" }
+            Status                 = if ($Package.Status) { $Package.Status } else { "N/A" }
+            PackageUserInformation = if ($Package.PackageUserInformation) { $Package.PackageUserInformation } else { "N/A" }
+            Dependencies           = if ($Package.Dependencies) { ($Package.Dependencies | ForEach-Object { $_.PackageFullName }) -join '; ' } else { "N/A" }
+            AppType                = $AppType
+            Scope                  = $ScopeValue
+            IsProvisioned          = $IsProvisionedValue
         }
     } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
-    }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
-        }
+        Write-Log -Message "Error creating enhanced details for $($Package.Name): $($_.Exception.Message)" -Level "ERROR"
+        throw
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBsWjKokwnN4kSy
+# OggTiE2iDbe38D8igjxrfNC/a5r4iKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +271,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCA4rgryFp2BMAtEXFpObRAIEi4rYwATGU2dzG1WYL3Q
+# zDANBgkqhkiG9w0BAQEFAASCAYCiiXUqzBkrdvQ4HPUeze2SgOjFZbRzpExHHRjo
+# KzLQ08nIjKaQPW7Mf6rEDVDwew1HXGP+Mygg3nRLAC5VTyUfv1RPKSTxJUdAXUw5
+# v+FZuVkyiZeNlPUX6h3nwU/6wgK3p9o77aC9SY6YCN2M98zQdSZ6Tx6Em1x1qi9h
+# qHnwD8UUdwuUA+h+bJvnJtdBHFH9KtCxnfELCPrlXaTr0rCsD1FN5z9l96BE0ZiF
+# kmiqvo8udKJN1bMcaFMQRVY3QsSKgGPw21IMQ5nuigkznhe3R5yvb8/5Ia+n1CAy
+# 60l7yE0pl/q4Yz7MZFBugoc3/x+AdX5oe9dvXxxWOrb1Rn0r6PFf91nt62+WNd47
+# 6Ax/l78UV9cjFrH+Lo7+axpxdtsvYTR1jMT0IJaebla3diaHj4QqCtopPXmHXmlw
+# O7tVrcgwI8vlcDKXBFjsaV7dc8KzkZqDuVryoZyOzbsyN//QrdU4RZFIlleeU39w
+# 6ThaU0mKyqKs1MxZpaltaSbwEW2hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODQ5NDhaMD8GCSqGSIb3
+# DQEJBDEyBDC2qttSxot+kDA/UFqRyOduLLNApnJTbDto4im7DSpdVT8rTnzpBtCr
+# mWCoUDFczEcwDQYJKoZIhvcNAQEBBQAEggIAxZ16fUEJd+XZPWjZ5CMrsi4NA0hi
+# Xpzk/mtENKS8rbPqYhywTOBY6DsKMx8Mwz4pg+KCQXFPvUA/CqOclm0FnTH3RiDF
+# V5liMvIZLQPzt6nRFwS/NpDgg8lRxqb/Pv5UyFfK9pNj/MAcBJxUJtin4kiyZNoT
+# QMJrQQiWQJSuuFDV+JXudE4E4qvC15AQ4c3P1ig/qRZ198LUgPf0Iwj9cWIb+mvm
+# 3eslbeyrPX+nZKw0tXvjwOicwoBYtSNqI3FYHqoxR+JSV4+pJD7zJQnjLS9U288y
+# O+24mWe23GMftYJrjFs1w7rRKXaqgBclzJsuAa9QhZ3OQTGD903cou1bAZ60gGY8
+# PbLuLegcuynSl+R3P6Ei/fKp+vbky5b6dAjOgAoX06oFXq7/6uA0ycxkYsnho73W
+# Kl4TfQeHLORl5HQNyZUwxbykRWwlhgobni1DDArmhAk//nhEfkURz1z8tjxVgkmf
+# itljaT4vUkIvowT9hjYpRGYEFc86B92JlAIIFlPShFqjQktXAyxsgriVwVHaSxVP
+# +uLkyuK58MPKjYFAluahSRgA6THP6bL02PmXZU4rBMtWun+ly23vnwqx6lNVr7p/
+# IA8v1TOy7qvTByW4OPGlR3ZVzaHiqVzmdDaevfhk5TEwr7aFuOHY8UgNXfZDg7BW
+# YWJK91SUCwg4w6E=
 # SIG # End signature block

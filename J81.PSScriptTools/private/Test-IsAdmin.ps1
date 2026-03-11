@@ -1,123 +1,43 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Test-IsAdmin {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+    .SYNOPSIS
+    Test if the current user is an administrator.
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+    The 'Test-IsAdmin' function checks if the current user is an administrator. The function returns a boolean value
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .PARAMETER ErrorIfNotAdmin
+    If specified, the function will throw an error if the user is not an administrator.
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    .EXAMPLE
+    Test-IsAdmin -ErrorIfNotAdmin
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
-
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
-
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+    .NOTES
+        Function Name : Test-IsAdmin
+        Version       : v1.0.0
+        Author        : John Billekens Consultancy
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+    [CmdletBinding()]
+    Param (
+        [Switch]$ErrorIfNotAdmin
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
-        }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
-    }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
+    Write-Verbose "Starting function : Test-IsAdmin"
+    $userWindowsPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent([Security.Principal.TokenAccessLevels]'Query,Duplicate'))
+    $isAdmin = $userWindowsPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    Write-Verbose "Ending function   : Test-IsAdmin [isAdmin:$isAdmin]"
+    if ($ErrorIfNotAdmin -and -Not $isAdmin) {
+        Throw "User is not Admin, script need elevation!"
     } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
-        }
+        return $isAdmin
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAjRZwy5sQmAqec
+# pfxaF8xyFze0iTbnoCT58mZU+MMY4aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +213,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCC3vZKKnaNRZ9Ot1HNb7xnp8HhBq1/ZgSjiBqi+Bk5v
+# TzANBgkqhkiG9w0BAQEFAASCAYBYxBmDdiYHGFU7QZ0UcHnOkwuqYEgyYQ3IYWbc
+# DQVy12Ilq6UPWjWIO6SO20Xo0InfqXCmmwPUAL41mN2BoE/4C8fJDHP94gSy9Ope
+# 3h8ZKCd9NEriixH2WZGiyKJt2QVgY2ekTTipytZ3IPfOyC014JxdxaQMtYaiJGuj
+# YgQFY8mO2dkwBJ3V2X1bxqj+8fAt8Q6liHFrEu1wARDsxshR6FScB8baS43u75qu
+# ifP2tQDCCdlJ7duOZaEsQUpJ0WfcrSUm8G9BdMH2FD6Q+60B0GBpCO9NbORq+JvV
+# qgPvnMcLQYkCIDs82lRoVXNORAjfgEjdhbvS2VUc2CDq3wub4eOIlUbfQE3SPS8k
+# E9CQevfMYFG8M4b6oJdp737PZ5Mu11q/6nmR+3RGgwrXGNdRNe6zmVNjAR3Et5nq
+# GG3CGk+RGpgLymG5xiN5+h/0OXyGFFk6XSdWR/1BHvTXYRmk696K6bEvbXVl5eR7
+# 1G/EMUyvEnWeaip3ONHNhGzhvJihggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMTVaMD8GCSqGSIb3
+# DQEJBDEyBDCpc6LoUuS9dRMnVgMFruEmZG3UntVDgvoF9IWjQBJOgySNw6mczG1M
+# TcJS92zK7wcwDQYJKoZIhvcNAQEBBQAEggIAGAL6TUpW5CCnSJmxayeCkmv5XTI9
+# eA38ccYO+lgfveOymeX47iFadKEpvPDzzeO6yEDk85KvI+rlWlzdUBJZ8oIOAvX3
+# q/fmw5jYzMWn7YLSeHbfBfzHqUegxd5kD9JP8pOK3qaClsNSgS6/7OF+eyoRTAjX
+# ibxq3FQPRAHGVk0aWd8B/I3Bf9GY5HYfJ4zQF0WMAYM6ipSqE93InWVV4srmo3rt
+# dWXBc10jPS7fw2KT4CC+k4KcA5h3AXLaM8oyWKRjAHMOLkjsErPCfVPxhzka04rO
+# Ic8gCADQfM9Uc8tNW2er1SdgeaxPycJNuDkqZZaDMDPZk+PcIBoJMeZgsL+flael
+# YVrk2q2azBxC51NLd/F19fgY/GqfEfxKPCG3O4NSSyMEuwkrITsdLHlqrfUTzix9
+# C4gOiYfgJLPBj09UGPwKBwuz3Z8208lmrOe4yRK8s/FFmBpAYdz9LiOlnkSaozAu
+# GlOaA755egnGaOoMOlE8PNhQiG0rZ+juieoAfL4RjXpJJSu+U5zmdk/HudsnLPAd
+# KU9snLQB0kIYbntxdFPzHb52H2r1DzWySpAmrg859mdEtO3CUGoaISLF7OQmPK6s
+# 3sAoOl4BB6D+WEaowY0xdzLbDOAd1j8cpqIqLu0S4zMffb3qJ8jlznLVdG+/ng5U
+# M0Gg5EJFGQop7DM=
 # SIG # End signature block

@@ -1,123 +1,146 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿#requires -version 2.0
+
+
+function ConvertTo-HashTable {
+
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+.Synopsis
+Convert an object into a hashtable.
+.Description
+This command will take an object and create a hashtable based on its properties.
+You can have the hashtable exclude some properties as well as properties that
+have no value.
+.Parameter Inputobject
+A PowerShell object to convert to a hashtable.
+.Parameter NoEmpty
+Do not include object properties that have no value.
+.Parameter Exclude
+An array of property names to exclude from the hashtable.
+.Example
+PS C:\> get-process -id $pid | select name,id,handles,workingset | ConvertTo-HashTable
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+Name                           Value
+----                           -----
+WorkingSet                     418377728
+Name                           powershell_ise
+Id                             3456
+Handles                        958
+.Example
+PS C:\> $hash = get-service spooler | ConvertTo-Hashtable -Exclude CanStop,CanPauseandContinue -NoEmpty
+PS C:\> $hash
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+Name                           Value
+----                           -----
+ServiceType                    Win32OwnProcess, InteractiveProcess
+ServiceName                    spooler
+ServiceHandle                  SafeServiceHandle
+DependentServices              {Fax}
+ServicesDependedOn             {RPCSS, http}
+Name                           spooler
+Status                         Running
+MachineName                    .
+RequiredServices               {RPCSS, http}
+DisplayName                    Print Spooler
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+This created a hashtable from the Spooler service object, skipping empty
+properties and excluding CanStop and CanPauseAndContinue.
+.Notes
+Version:  2025.1110.2017
+Updated:  January 17, 2013
+Author :  Jeffery Hicks (http://jdhitsolutions.com/blog)
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+Read PowerShell:
+Learn Windows PowerShell 3 in a Month of Lunches
+Learn PowerShell Toolmaking in a Month of Lunches
+PowerShell in Depth: An Administrator's Guide
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
+ "Those who forget to script are doomed to repeat their work."
 
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
-    #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
+.Link
+http://jdhitsolutions.com/blog/2013/01/convert-powershell-object-to-hashtable-revised
+.Link
+About_Hash_Tables
+Get-Member
+.Inputs
+Object
+.Outputs
+hashtable
+#>
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
+    [CmdletBinding()]
+    param(
+        [Parameter(Position = 0, Mandatory = $True,
+            HelpMessage = "Please specify an object", ValueFromPipeline = $True)]
+        [ValidateNotNullorEmpty()]
+        [object]$InputObject,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
+        [switch]$NoEmpty,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+        [string[]]$Exclude
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
+    process {
+        #get type using the [Type] class because deserialized objects won't have
+        #a GetType() method which is what we would normally use.
 
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
+        $TypeName = [system.type]::GetTypeArray($InputObject).name
+        Write-Verbose "Converting an object of type $TypeName"
+
+        #get property names using Get-Member
+        $names = $InputObject | Get-Member -MemberType properties |
+            Select-Object -ExpandProperty name
+
+        #define an empty hash table
+        $hash = [ordered]@{}
+
+        #go through the list of names and add each property and value to the hash table
+        $names | ForEach-Object {
+            #only add properties that haven't been excluded
+            if ($Exclude -notcontains $_) {
+                #only add if -NoEmpty is not called and property has a value
+                if ($NoEmpty -and -not ($inputobject.$_)) {
+                    Write-Verbose "Skipping $_ as empty"
+                } else {
+                    $value = $inputobject.$_
+
+                    # Recursively convert nested PSCustomObjects to hashtables
+                    # But preserve arrays and other types as-is
+                    if ($null -ne $value -and $value -is [PSCustomObject] -and $value -isnot [System.Array]) {
+                        Write-Verbose "Recursively converting nested object: $_"
+                        $value = ConvertTo-Hashtable -InputObject $value
+                    } elseif ($null -ne $value -and $value -is [System.Array]) {
+                        # For arrays, recursively convert each PSCustomObject element
+                        Write-Verbose "Processing array property: $_"
+                        $value = @(
+                            foreach ($item in $value) {
+                                if ($item -is [PSCustomObject]) {
+                                    ConvertTo-Hashtable -InputObject $item
+                                } else {
+                                    $item
+                                }
+                            }
+                        )
                     }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
+
+                    Write-Verbose "Adding property $_"
+                    $hash.Add($_, $value)
                 }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
+            } #if exclude notcontains
+            else {
+                Write-Verbose "Excluding $_"
             }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
-        }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
-    }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
-        }
-    }
-}
+        } #foreach
+        Write-Verbose "Writing the result to the pipeline"
+        Write-Output $hash
+    }#close process
+
+}#end function
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAAoB8d061fchfl
+# f4k2t+HRos39Pd/EK92tVJradfZ4+6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +316,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCD4jsX9BLgQwsW3JnbLthcm7mNMhzbhzU1UJqjoqMg
+# 4zANBgkqhkiG9w0BAQEFAASCAYC/UHl/BCYoPIey2IQN49mQAi6Cp5Txb2yN7Qsr
+# dB8ome+xE9giGfn4bMImY7kPMpEFrIj58JlrJXtgbsUm5lXpZW0/17UeuayYODhI
+# zZ1ea1rI0MB7tq1dmoV7JxigZOwTdgf+3Ln9+EyE1Pot9CQZEGM+eQZGWsdUjTuA
+# oFSFvB3uLPLXLli53vci0cYbbOCzncMIO6rdv30tTC33l4+oSoYIsuNBbE/YR8Q8
+# DFw6WjILPgxSld47Mr9vgA4tDnfG4QwAapMNKALYKOlb8u56jc5cmd67YOzJ2UeW
+# JAH9SyuJ/IEqqxf1m2lbqaldmDvR6pmf96TAu9N9OYyafHq41Zr8VS93BvFE4DIi
+# R4a0ZiPWPNUt5ddrxjBbJN6iJZy2kpRzNW1AqpjnHIGnY4ByO0kPxOCsHTUTTutT
+# lmyTXy2t0kliIVEHqIWz+Nbjg9W/WajEUgZWRw9fGObqH2n83Z1gUHED5juq1jcN
+# tiOJqeiyukl/jiBKU9r26+iWxAWhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODQ5MzZaMD8GCSqGSIb3
+# DQEJBDEyBDCtUTb8MvkN+r0Y75vBs114r9jrUJenL5aNW8TRDCI9R3mI9GwIcW1M
+# N1vWGC/wQAkwDQYJKoZIhvcNAQEBBQAEggIADooJvG29wCb/51J3M3mgn9R02d6I
+# NukIVin6+uwwooLUeHbbPpoM4TXB4ZWPkK7hKN+sIsGboeiJgoynNY2/io/MPMSA
+# 0oIoepZwSUUlAj2e8MTYyeATJk2OVylVO0c5uwGiW0h+Su2xVXwRbrAzwdIbYDYX
+# a0mG3PVC8G4BTORzzRxIzj1smKXUQx0Q6U4lP6Ok/Jc0JoQUPC1DjaG7+XmbnKmN
+# XQT0ycjpjq2HLQGt6vb1nWhRxI74FPGYbXiMpMOLnnw3Wq9atvyaMQqrrxzXHCUb
+# TXlInfYT3aOp5v/YYxnRKwjvXgeNYXAN+ptvT3InPwqNLAnWN48AsDAeBWZcTKjj
+# weipdOhEIJwFshfM5U+ONzlhg1N8Csla9rBPhgUYwsflkTU44HsFtuUJ+1Lswfou
+# p383xL1AtM9nyHdqtIEHwRIJjYOoQ+uykqwcvCLZa1fgoB/gpv9Hhn7qkbqW9aX5
+# zXZU+UkKrAqBqsLFWMjGKd7tL9R0CZws+y2Ts7yMIlYpqY+Gpz4zqjhTQyfaJ+53
+# q9M4uYqjiGZvmx3FN9no/HPC25HDwtexkzE2yJCgVXLf9GvV1BiZ0y056zSNJV3n
+# lA4Fb6buYqCmi32yj63Untp5w6YT7NsF+59RCytwHvHFif93SlzJ3b89q47Tt5LZ
+# Dv3xUh0CthcMKkE=
 # SIG # End signature block

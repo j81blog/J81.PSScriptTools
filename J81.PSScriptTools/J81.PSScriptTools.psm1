@@ -1,22 +1,52 @@
-# Get public and private function definition files.
-$Public = @( Get-ChildItem -Path $PSScriptRoot\public\*.ps1 -Recurse -ErrorAction Ignore )
-$Private = @( Get-ChildItem -Path $PSScriptRoot\private\*.ps1 -Recurse -ErrorAction Ignore )
+﻿# Ensure proper UTF-8 encoding for PowerShell 5.1
+if ($PSVersionTable.PSVersion.Major -eq 5) {
+    try {
+        # Set console and output encoding to UTF-8 for proper Unicode character handling
+        # This is critical for preventing emoji corruption in PowerShell 5.1
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        $Global:OutputEncoding = [System.Text.Encoding]::UTF8
 
-# Dot source the files
-Foreach ($import in @($Public + $Private)) {
-    Try {
-        $import | Unblock-File
-        . $import.fullname
-    } Catch {
-        Write-Error -Message "Failed to import function $($import.fullname): $_"
+        # Also set the current session's output encoding
+        $OutputEncoding = [System.Text.Encoding]::UTF8
+    } catch {
+        # Silently continue if encoding setting fails
+        Write-Verbose "Warning: Could not set UTF-8 encoding for PowerShell 5.1"
     }
 }
+
+# Define paths to public and private functions in a more robust way
+$PublicPath = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
+$PrivatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
+
+$PublicFunctions = @( Get-ChildItem -Path $PublicPath -Filter '*.ps1' -Recurse -ErrorAction Ignore )
+$PrivateFunctions = @( Get-ChildItem -Path $PrivatePath -Filter '*.ps1' -Recurse -ErrorAction Ignore )
+
+# Dot source all functions (both public and private) to make them available inside the module
+foreach ($FunctionFile in @($PublicFunctions + $PrivateFunctions)) {
+    try {
+        # Unblock files downloaded from the internet
+        $FunctionFile | Unblock-File -ErrorAction SilentlyContinue
+        . $FunctionFile.FullName
+    } catch {
+        Write-Error -Message "Failed to import function '$($FunctionFile.FullName)': $_"
+    }
+}
+
+$Script:ModuleName = $($MyInvocation.MyCommand.Name) -replace '\.psm1$', ''
+
+# Cache variable to store parsed data (script-level scope)
+$script:NVCachedVGpuData = $null
+$script:NVCacheTimestamp = $null
+$script:NVCacheExpiryMinutes = 360
+
+# Log file path (script-level scope)
+$script:LogFile = $null
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDelzr0tQJa4TR2
-# tD9wKFHFKsO/hcGs4KR3uYD6GPomNKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAZo+yQQdohARRP
+# L1CPMgpkuF8i9h2bx2PpWEOoGwHZFaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -192,31 +222,31 @@ Foreach ($import in @($Public + $Private)) {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCBDBbQSyRae03S/6yKArL7wXQx5L6wAKM2fmjj+M60o
-# ijANBgkqhkiG9w0BAQEFAASCAYAFbiXqXFT0YVNkYuM3kUZDQ8/Lsa2Dm+6bRhaN
-# 3Fanfhbo+Ih9NINnHcdtlrKOoP3booT3htA2qREFRLJYJmWCqG1rgfEggyIdkdhw
-# KQNfn0ThoMP9q814MQ66YNWaxMmMbxC9fNeuSX0seyYVwtjrZ1Yivesl4FpaMOp4
-# crSvt6+BOy+5l9y15sYDSnMLaQ83qSK3gZkmsfaadDjSsC7mUUbIvF5HNxtcN4do
-# dqNvBYImIN/1nh+zRNdjtsgI14MWjHsKYiXWjQpeQfNIXeGTwJ1iJU8mWX2nxBav
-# 8YFavLfzMg/wzdmJXLj1nzccFoF+BHrLRsd1H9SyYb5oNiYq2Z3s3mgsnlvP9rsa
-# zXHXre5Mo5rxaXj99BKR6mkspNfXNIocoMUM52Gmk+pSSrLF7/xUhHUHwd3ijGKx
-# U+0kkILAuXHymy9C3AhGDtFUQDaU/x+HxZQO96HtL9X6QvdftFQbjVyZwm2Q5eDo
-# CUbKPmldYy9RknrJCNq7vQk/nnShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCBGM1NP/utxKARFTZQWL4ObOLLPOHlC8gPmi5LSr9u4
+# RjANBgkqhkiG9w0BAQEFAASCAYBtvVqAbOWTHvxm9mJ3yRJFPo/UHxYq8rDGmulX
+# aJFNMZ2Wm4RJCpO3x7SIsQZMS97uVN6JMUqKQ+AsuWsIYAaERTIWgdMZ3mwg1alM
+# XZAuw+IqqiFvFuqPyqcz8CoMzqF9DRBJiYQgLbsViQ3yVkpUVbEgpsMFX+h4+21z
+# HcdLuKRQC7LqbIuss2GRCO1TD/qc9w1r5P14NaYJKEoZzg94BhQAsP2S3t1bD3vq
+# O9M5CY+BgjjUN4ixBtclYdukyvZlgHS1zJ5nq6L2B+i+sIv4cnakuUXDU8u0adkz
+# i1wZPSF2I9PaW6FYq0O/J45Sj5f2bmys9+y5/k6xwN8d0XWoYARlvsJhwExG+ixV
+# kD6zSYTTnza+IeRKbIYAnUoegN8C7pSxWCFUTDnet2hMhZqnY9L7xoRxZ16a/MA4
+# khr0sFsxB+8EQY9NCplUA7qXgVKPByvPSriwtku1HIQGinGM+OHyUqYxdlEaniRs
+# /PmWAR5Qo67qhjwDHt1IpeaAYVahggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA3MTYwNDU4MzJaMD8GCSqGSIb3
-# DQEJBDEyBDDizCixX5A1QEaLW0ieWa71aXh1B8A6zC+30jfWplOlzc2BZ1OOMhLe
-# jkzvLytiCiMwDQYJKoZIhvcNAQEBBQAEggIACo40Kb56jJgj4OD80d0hNgFFSMxS
-# wfBNkrn9q6oWgrDDC6qwOUDabaEd123kbpFuxUy2EEhGus8I4Y2hYABK+3bGmIf4
-# zH4v/QgHxxUlCAeIvVihpOs6WodkO3mdk1YB9z6KRcOgMSL90/lCDXICbhfa2dL2
-# ZG9skKeVau9o3wWTTFQ+pE+WatjbRuEtn69yQz3i2dHFW5ooaVl1W6JdnnPixM1Y
-# zPmGo8eEDsxialEdIgu5hKytcIHxPc0/uzJpvn2DIhm6I4WC4OTm682pbs0Fk1rL
-# 9uQKMTskClsUFCqXcfT3FTiap3BIvnJUBpP6axfIFaaPrb9tvJKaJRHP3/CELKNq
-# AUgsZXs0yfZ9W+lPaQkymFYq7et2LLoA52s0cyap61jKt0+qCRgaQ8NVOcqbqfAy
-# xEXTajfmZEaaV9Wp4uAT7rWp+zXDMIabWO6uSNPY9cDSTTC9RdGpoczTR+fuCpA3
-# EK1dJODaTEjRHgKQmmasuPRN0DOF891lNXH+uvg6YyxvxDS0mD9725W03lKef/Hl
-# ZmyP11DlInOittuh/4UTdVMg1dcAUJDA0DhXeHRFK069Nv4QTQsuXmskueQl6ttc
-# cinXvfwaMC4UxOCkI68V3kmRVHpIqr73jZ4AOiVbNy1phXWdAleEHsDu9ZDX4yPB
-# cTuIgtmr8YiFH0k=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUxNTFaMD8GCSqGSIb3
+# DQEJBDEyBDBRkcVh4AroWIGONyVlcxgpJQuVxkwBbLqrly+avq8nUPoZRh5aRghU
+# rZYmNSxzW8EwDQYJKoZIhvcNAQEBBQAEggIAE+ST4g3eMGxY3mZoPb3CNFF46gSU
+# dZQOUqC9SvSB5QbClx2IK41hSxEDXAlh/XVYiOt60YGhNrpC6yWKVTCJTFZtZjGE
+# 5gOprTMAQ3AtIvZ9/sSIvp6HTQUSfHHjb+Bk/e7XmbG+Ohex0fkvochF2p/eOteF
+# ATRSiHGQxO6Q+X+eIHHZRtkY/u81lg2IJuni/XQmZ1W6jaUdGroRagFe9j9F58L0
+# nc2ZhRUeM1Y4QWkaPqsCUlPwjVoL/Y6OaqErBFaF/8FuNPJfdG0tCpDJkf5FHaZd
+# LJVSiSxCeqrxCStdObWCPxQvHwsDZvIMqL5TFV/taoGM9F+FgC2YsrKQfyFHR2pm
+# yc3RqaQWAPrbhHplEJcBUJoxcX+/kYicNXLWZ3rbq0mrarcrf1Z/a4wlHpdYLreu
+# 4ipXBp6UM5mCY6Qb5/RxhlAA4Ja8QLjiE9IyocH4VTR1+XkBYEju0j0LVDcCWI9P
+# U7jSdRtyPBSmV7KzhOvbaMZDZsQN3y/g55rbL8L7faf4m0mtM77OS7iiYhX8z4Ba
+# k3khjoiA9cInpa1lbKNl2OjDpS2eubDomhWogDjMPMriSQ0trhrt9uC+ddIvWVQ4
+# nMu6hwuUPuOEBx/K1kifI9pDb2uQW0JGJoHWY9SjsfD/8Y3ApyMGY54UqiK1OJGv
+# Da2UoXvtRM1UBbU=
 # SIG # End signature block

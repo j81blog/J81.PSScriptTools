@@ -1,123 +1,137 @@
-﻿function Get-GitHubCommitDescriptionByName {
-    <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+﻿<#
+    .SYNOPSIS
+        Retrieves NVIDIA vGPU software release information with filtering options.
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+        Fetches and parses the NVIDIA vGPU documentation page once, extracts all release
+        information (both summary and detailed versions), and returns filtered results
+        based on parameters. Much more efficient than making multiple web requests.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .PARAMETER Latest
+        Returns only the latest release in each branch (summary view).
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    .PARAMETER MajorVersion
+        Filters results to a specific major version (e.g., 19, 18, 16).
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+    .PARAMETER DriverBranch
+        Filters results to a specific driver branch (e.g., 'R580', 'R570').
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
+    .PARAMETER Category
+        Filters results by category: 'Active' or 'Older'.
 
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
-    #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
+    .PARAMETER Detailed
+        Returns detailed version information for all sub-releases (e.g., 19.0, 19.1, 19.2).
+        Without this switch, only summary information is returned.
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
+    .EXAMPLE
+        Get-NvidiaVGpuReleases
+        Returns summary of all vGPU branches
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
+    .EXAMPLE
+        Get-NvidiaVGpuReleases -MajorVersion 19 -Detailed
+        Returns all detailed 19.x releases
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
+    .EXAMPLE
+        Get-NvidiaVGpuReleases -Category Active
+        Returns only active releases (summary)
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
+    .EXAMPLE
+        Get-NvidiaVGpuReleases -DriverBranch R580 -Detailed
+        Returns all detailed releases for R580 driver branch
 
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
+    .EXAMPLE
+        Get-NvidiaVGpuReleases -Category Active -Detailed
+        Returns detailed version info for all active branches
 
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+    .OUTPUTS
+        PSCustomObject with comprehensive release information
+
+    .NOTES
+        Function Name   : Set-GistContent
+        Version         : v2025.817.1705
+        Author          : John Billekens Consultancy
+
+#>
+
+function Get-NvidiaVGpuReleases {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [switch]$Latest,
+
+        [Parameter(Mandatory = $false)]
+        [int]$MajorVersion,
+
+        [Parameter(Mandatory = $false)]
+        [string]$DriverBranch,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('Active', 'Older')]
+        [string]$Category,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$Detailed
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
+
     try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
+        # Fetch all data (uses cache if available)
+        $allData = Get-AllVGpuReleaseData
+
+        # Determine which dataset to use
+        if ($Detailed) {
+            $results = $allData.Detailed
+            Write-Verbose "Using detailed release data"
+        } else {
+            $results = $allData.Summary
+            Write-Verbose "Using summary release data"
         }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
+        # Apply filters
+        if ($MajorVersion) {
+            $results = $results | Where-Object { $_.MajorVersion -eq $MajorVersion.ToString() }
+            Write-Verbose "Filtered to MajorVersion: $MajorVersion"
+        }
 
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
+        if ($DriverBranch) {
+            $results = $results | Where-Object { $_.DriverBranch -eq $DriverBranch }
+            Write-Verbose "Filtered to DriverBranch: $DriverBranch"
+        }
+
+        if ($Category) {
+            $results = $results | Where-Object { $_.Category -eq $Category }
+            Write-Verbose "Filtered to Category: $Category"
+        }
+
+        if ($Latest) {
+            # If Latest is specified with Detailed, return only the latest version per branch
+            if ($Detailed) {
+                $results = $results | Group-Object MajorVersion | ForEach-Object {
+                    $_.Group | Sort-Object Version -Descending | Select-Object -First 1
                 }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
+                Write-Verbose "Filtered to latest version per branch (detailed)"
             }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
+            # For summary, Latest doesn't change anything (already shows latest)
         }
+
+        Write-Verbose "Returning $($results.Count) result(s)"
+        return $results
+
     } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+        Write-Error "Error executing Get-NvidiaVGpuReleases: $_"
+        throw
     }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
-        }
-    }
+}
+
+# When script is run directly (not dot-sourced), execute with passed parameters
+if ($MyInvocation.InvocationName -ne '.') {
+    Get-NvidiaVGpuReleases @PSBoundParameters
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDXm25VwnxyL3uZ
+# elySkNq+LV4xn7eO+5yjMht97cwgv6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +307,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDzl+JIJkZZ+fagA+esKuB4MsqgvXcOpulZ35ZBCR3e
+# fzANBgkqhkiG9w0BAQEFAASCAYAkwOO/8L82v0zsLfdQCr8PQSylZzKeINfak+Wm
+# RuSzgHfJ34pn3ZBVi2DPvFH4wE6Ye5+jbggBT4RqiJaLPLA3u/dI5M76fr13V0Lh
+# 1zfM50rRjZTenpwxi8DoFlk9eiiVsqHDHreYe30ALazhQFrDlDi5pRM70iP2QSpt
+# NVf0rkDQTTIHzyQxqENt7335xGcBMqTYikgM686LrD44PziEFke4LXGfzEAejINo
+# VI6cob2Ldm8uN3PpkKMJAxrRsMieVsZ+SZoW5VnIaC7xkA1+cY+HyRbns2y5TOV0
+# +1L6rVpDDE9oR1dNXN9IPc2X9ihnWF05HXMGePZ6MnEWW516VccXZCbf6OzLLKk7
+# u1gnA1MJ4lukjE1tXPktfjOiU1wc15wXvB2eP+BzNM1OHQPZfsNHFPq2bXxVTK2s
+# EtGINdudMqYNDNPzIPnlfZ9mD0r4xTNy9qPajJZcHMIA4z8LhgnBJgx98C0G/XOl
+# Z08KDePy+grdb2XD8ei4+k4NbVKhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzlaMD8GCSqGSIb3
+# DQEJBDEyBDBI2TkQ+Pg/iU0idYYIX7sRU7G+59pLtv9Xm7x4TEjVIx09f/xQTazA
+# foksdaCM0sgwDQYJKoZIhvcNAQEBBQAEggIAlFuAEainYa3de1xWkauji05L7dmq
+# qkUfbxu6DJk7BCc6F3O0vy2OF9MfC4ZW1JS+KaoGm8HVQ9j0g420bXRtw9KucKKf
+# F19mPuLCncUY4kexVcpkTReKFYL+yyhQ4GBTM/OmiinqgOtdi7T4gOG3AkHw7N5B
+# r33gk2O3ldP0s27TNhPLnjrBbwmv/bmjSzCOkXNa30YeApKubId0jkiH0S4TVo2e
+# yYw3OFPtk3tME6oFD8uh493hjWYKlbzm92HX+T9w6cdsxPhnbROrNY4UmYdxN6y2
+# K4Cjb6I8xpeDxHY1u4Uqsmch2oMF3MtL9PdR+i8Qh8qRuR55jPlgeBcEhQyU5zh+
+# o2wpLAH+oJnre0zIwqW8k6pX0flXJekSt5U40FVtOZbJPwTKdoJWbR0MLm3lXvJH
+# qIzDzdQA6dV50f1WfJ8Gq1Q1dcoOPVowf0JhfXdCzRAjtA9cPaZ1T3dXMVYH6ypL
+# XYb4vCLLz7KNvnZhsq3l31Lp+6Rh7d2KUlP/EUD99MSO/cQkgTRpKNZ6uSpPn8pW
+# BjRm9OJn2kttkKbWx+4H2WbEB6Tz1ml4KoGWBZYHaXF9Mn+4Pg4B7MpW8iUchc6v
+# BihgxFxrZHnF5/8R7F2tNtw8Il6qxai/97P92njR1gJzewY/eCNGuN2NpG9Xk/wM
+# AEft8QLzYIlu7DQ=
 # SIG # End signature block

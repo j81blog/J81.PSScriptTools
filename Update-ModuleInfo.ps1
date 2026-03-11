@@ -1,101 +1,49 @@
-﻿[CmdletBinding()]
-param(
-    [Parameter(Mandatory = $false)]
-    [string]$RemoteBranch = 'dev',
-
-    [Parameter(Mandatory = $false)]
-    [String]$Uri = 'https://github.com/j81blog/J81.PSScriptTools',
-
-    [Parameter(Mandatory = $false)]
-    $ModuleName = 'J81.PSScriptTools'
+[CmdletBinding()]
+Param(
+    [Parameter()]
+    [string]$ModuleName = "J81.PSScriptTools"
 )
 
-#Requires -Version 5.1
+$CmdLets = Get-ChildItem -Path "$PSScriptRoot\$ModuleName\Public\*" -Filter *.ps1 | Select-Object -ExpandProperty BaseName | Sort-Object
 
-if ($PSVersionTable.PSEdition -eq 'Desktop') {
-    $InstallPath = [System.IO.Path]::Combine(([Environment]::GetFolderPath('MyDocuments')), 'WindowsPowerShell\Modules')
-} elseif ($IsWindows) {
-    $InstallPath = [System.IO.Path]::Combine(([Environment]::GetFolderPath('MyDocuments')), 'PowerShell\Modules')
-} else {
-    $InstallPath = [System.IO.Path]::Combine($env:HOME, '.local/share/powershell/Modules')
-}
-
-$ExecutionPolicy = Get-ExecutionPolicy
-if (('PSEdition' -notin $PSVersionTable.Keys -or $PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows) -and ($ExecutionPolicy -notin 'Unrestricted', 'RemoteSigned', 'Bypass')) {
-    Write-Host "Setting process execution policy to RemoteSigned" -ForegroundColor Cyan
-    Set-ExecutionPolicy RemoteSigned -Scope Process -Force
-} else {
-    Write-Host "Current execution policy: $ExecutionPolicy" -ForegroundColor Yellow
-}
-
-if (-not (Test-Path -Path $InstallPath)) {
-    Write-Host "Creating module path: $InstallPath" -ForegroundColor Cyan
-    New-Item -ItemType Directory -Force -Path $InstallPath | Out-Null
-}
-
-if ([String]::IsNullOrWhiteSpace($PSScriptRoot)) {
-
-    # GitHub now requires TLS 1.2
-    # https://blog.github.com/2018-02-23-weak-cryptographic-standards-removed/
-    $CurrentMaxTls = [Math]::Max([Net.ServicePointManager]::SecurityProtocol.value__, [Net.SecurityProtocolType]::Tls.value__)
-    $newTlsTypes = [enum]::GetValues('Net.SecurityProtocolType') | Where-Object { $_ -gt $CurrentMaxTls }
-    $newTlsTypes | ForEach-Object {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
-    }
-
-    $HostUrl, $Owner, $Repo = $Uri.TrimStart('https://') -split('/')
-    $Url = 'https://{0}/{1}/{2}/archive/refs/heads/{3}.zip' -f $HostUrl, $Owner, $Repo, $RemoteBranch
-
-    Write-Host "Downloading latest version of $ModuleName from $Url" -ForegroundColor Cyan
-    $File = [System.IO.Path]::Combine([system.io.path]::GetTempPath(), "$ModuleName.zip")
-    $webclient = New-Object System.Net.WebClient
-    try {
-        $webclient.DownloadFile($Url, $File)
-    } catch {
-        Write-Host "Failed to download the file from $Url, Error $($_.Exception.Message)" -ForegroundColor Red
-        throw $_
-    }
-    Write-Host "File saved to $File" -ForegroundColor Green
-
-    Write-Host "Expanding $ModuleName.zip to $($InstallPath)" -ForegroundColor Cyan
-    Expand-Archive -Path $File -DestinationPath $InstallPath
-
-    #Extract module version from module manifest
-    $ModuleManifest = Get-ChildItem -Path $InstallPath -Filter "$ModuleName*.psd1" -Recurse | Select-Object -First 1
-    if ($null -eq $ModuleManifest) {
-        Write-Host "Module manifest not found in $($InstallPath)" -ForegroundColor Red
-        throw "Module manifest not found"
+function Get-DateTimeVersionString {
+    param (
+        [datetime]$DateTime = [DateTime]::Now
+    )
+    $Hour = [Int]$DateTime.ToString("HH")
+    if ($DateTime.Minute -eq 0) {
+        $Minutes = 0
+    } elseif ($DateTime.Minute -gt 0 -and $DateTime.Minute -le 15) {
+        $Minutes = 15
+    } elseif ($DateTime.Minute -le 30) {
+        $Minutes = 30
+    } elseif ($DateTime.Minute -le 45) {
+        $Minutes = 45
     } else {
-        $ModuleInfo = Import-PowerShellDataFile -Path $ModuleManifest.FullName
-        $ModuleVersion = $ModuleInfo.ModuleVersion
-        Write-Host "Module version: $($ModuleVersion)" -ForegroundColor Green
+        $Minutes = 0
+        if ($Hour -lt 23) {
+            $Hour++
+        } else {
+            $DateTime = $DateTime.AddHours(1)
+            $Hour = 0
+        }
     }
-
-    if (Test-Path -Path "$($InstallPath)\$($ModuleName)") {
-        Write-Host "Removing any old copy" -ForegroundColor Cyan
-        Remove-Item -Path "$($InstallPath)\$($ModuleName)" -Recurse -Force -ErrorAction Continue
-    }
-    Write-Host "Renaming folder" -ForegroundColor Cyan
-    Copy-Item -Path "$($InstallPath)\$($ModuleName)-$($RemoteBranch)\$($ModuleName)" -Destination $InstallPath -Recurse -Force -ErrorAction Continue
-    Remove-Item -Path "$($InstallPath)\$($ModuleName)-$($RemoteBranch)" -Recurse -Force
-    Write-Host "Importing module from local path, force reloading" -ForegroundColor Cyan
-    Import-Module -Name $ModuleName -Force
-} else {
-    Write-Host "Running locally from $($PSScriptRoot)" -ForegroundColor Cyan
-    Remove-Item -Path "$($InstallPath)\$($ModuleName)" -Recurse -Force -ErrorAction Ignore
-    Copy-Item -Path "$($PSScriptRoot)\$($ModuleName)" -Destination $InstallPath -Recurse -Force -ErrorAction Continue
-    Write-Host "Importing module from local path, force reloading" -ForegroundColor Cyan
-    Import-Module -Name $ModuleName -Force
+    return '{0}{1:d2}{2:d2}' -f $DateTime.ToString("yyyy.Mdd."), $Hour, $Minutes
 }
-Write-Host 'Module has been installed' -ForegroundColor Green
 
-Get-Command -Module $ModuleName | Format-Table -AutoSize
+$NewVersion = Get-DateTimeVersionString
+
+Update-ModuleManifest -Path "$PSScriptRoot\$ModuleName\$ModuleName.psd1" `
+    -ModuleVersion $NewVersion `
+    -FunctionsToExport $CmdLets
+
+Write-Host "`r`nUpdated $ModuleName module manifest to version $NewVersion with $($CmdLets.Count) functions.`r`n" -ForegroundColor Green
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCKGGWBIdDZpHvc
-# uWI+xUZZB2uHJl538+PuZJydOt3Yi6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDbH5TcKcR0ekV7
+# 4lVTSOaXOaf++xPqMpwKxno3ysVyuaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -271,31 +219,31 @@ Get-Command -Module $ModuleName | Format-Table -AutoSize
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCDn0g31JO9GM9n5LaA8K4h4UBxC+V3whIMV8HPScjKY
-# zjANBgkqhkiG9w0BAQEFAASCAYCJe7AIgLMtMTtEo7OC5UKlf3PxYP+NNNHmX2Wp
-# X9uyX5nCztA793hri4SRedUV0D+lB7X/qmr0Eh0DPIdmkTG3aM8FYhkKLavI8PtH
-# Owczc5ZBW6Mpw/gIAfaXxa3WkgwYX4JGb2E2HNwX+rbLxXFd2hJWKKoc+tcyot7o
-# Fpk+EGNT4vdrRewpgnQQxJVGpBdlaGsH82iasY7E6cRTyllHTvMArgHy9U8Yf+zG
-# LXVJYZPulj9VMH2Ls8IpXRf5UMMgmgvEu/i2iQJwxbYPWH+0Ok9RGma8TQJGiEpv
-# Byoa8I1y9zMkH0U4J2tJsLicTbtpnuTdfSJmVJmPkpzOME9xXuQqZDQtqC0PaQdj
-# uAiw/PUYsNa8NEWRVMv8DIT4vQwSGR2QzZc4CoOzu997B9U82b6sGdiIytPToAUs
-# dUuP9dEeiL5/ZEHN2ErR7Mggb6j2Ub3OtwjaeyMUXM/GomXeQU6G6Bk1BdQn1pkF
-# RPffJEiNXf72+gtDvJ2kCq+YlP6hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCB4hlt5aVxDwUfXTSCg8kcvZsG+3edpD12MIdj//DVo
+# jTANBgkqhkiG9w0BAQEFAASCAYAobUvwrPe/1Kz1jC5TRQUWlmTipXs0AXKYKlG9
+# hZFMu0HBaQ9Y/GsT4jP6LNP8A2QhrruPcOchY2uFMggABVEL3ttO+uy2nmfGGaaW
+# BjU/9CTPnK6yvG52UVAatEVg2ayrisKArZ+MA+zkFOXXQdplfcubJ9q/CnAC2qk3
+# BpKQ9HEgQ7cvr9otZBheZNOKp4czekS5Udc00bqqU+PhZjLE5lnv9vVSv9jRuW5F
+# T/Ct09pPCNmDn6p/8mdNpXsMxo7hEA3qhEJgMWaOMgJcISv22kTStk/jmZ3jQAJ5
+# 0lZTr8Sb18EHOuwTybSmXbdumzjdfA+Bp9HxCZypFwFEWYv5p9gt3A9q/9/g8koJ
+# 63DlFzUCA5q570ubWTWi46h4EyUT7kXRj7lRuEcaC5ftNE8+4/Mma55S8QCXRk7B
+# ZPUii5X8IRdeO0j3q2JKcoyF4RA7Mp9eA2mmP/wWcERkd3c/NIgl09sJhn88DLoT
+# ssFRKplXAGxkY+duJH2gwAnqBnqhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMDQxMzI5MjVaMD8GCSqGSIb3
-# DQEJBDEyBDB05bqpyyXAXF9dxJpzCLTmt6xn6BvfGsUZp0vx5bJeuyGGy0Oeu1hd
-# WEhvisZ3yM4wDQYJKoZIhvcNAQEBBQAEggIAszpDje1nED5Ok7DHi4ksGfbXxDwR
-# r1NyEFkAozP1kXXLD3hpDyULJ1xeSyg9V30wKXKWwwkP/zQ5ZiCF/MV4U19SgAfo
-# vUBhftYc9xjfO312+fKk1bsapv3BzUOaNzHZEOXBL1t4wuM5Uc8/ujOGY+ZErJsu
-# e3ElASMFvKotDu+vNSLY99i3FSrpRTnZv9yj9nMonREF8/ndVxyA1kfQYvXbPhhj
-# PC2R+ikUPKZUL+DApIfsB5YefEfqYyZVi8XpSkuq9HRSgbIKxoBc1YoOm0CxYY9s
-# 5PMnBO3hBkNNwVKoRtfatLogOKFFp18FwIJlTfimdQwIv0dmLRGxlRtkmlhSuphP
-# FyF4ZPidbdH4yPHDhvUSgNU/4WSh1Q0/lHnBg8iFwMKvlngLiNcd3TRP3IzaMFYl
-# bzZtuvet7lo7LCxwJlDqFSIGjzd5HlG0UNsR87aW0g8X/rIS/7M4846sxGsrkz41
-# DyIHoG6JVN23KlI2WVOmOFkv0kIh/jVBfCwrtlebvg0Ih0dQZRV1el7eDShHHyDF
-# w42Pd54zuac+BP/SVY7IrlQUs+RcNc4WLB/A4JOjGBQaHHpik1VKEnbhRijI+ual
-# kOTf3XpURXUxNaHXWJUaAD5pWQD9B9XjAwwrMvNap1oEpUl1gIsu/EUseDiqQFl0
-# Z0IOeKWNX8qI4HU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTExMDkyMjE1NTFaMD8GCSqGSIb3
+# DQEJBDEyBDCpxzWSohH62y/NakMQJpA51NaslkqT2FISanfkGUneTiJR6UGatsSh
+# BmhohKKroz4wDQYJKoZIhvcNAQEBBQAEggIAMThtxq8IDLhJstIUNx6sRdM/2eeP
+# 5P8zKdlCcaUGnzRHA9NOKSJg4qC6ZL+OVsu+4DCoZSwH4zzG1mu+i5ogx3GTMM61
+# IjSckGQ/m3daGmyTEOTBVWq+BINICHlVO34YHAtrb6RUqR4Jt1j+oRChl73i3+2I
+# Oz5/sG9OMNG6m80OSJJRSH7HubP9sIpq1C4AEgYzJODYqNBrtauejKiDP3++4Ube
+# WxOp5gKjEAS4y2/3l+1JdH+1qA+9QzklUG89CVhMBk7kSNVbBJGcFZmQZ4QzTmLD
+# K8Kn6ojFuKXTQAHYvLdwXSpphPtghPW4h6zSXKwkpuOPA7khoN8QctT7To1eG8bo
+# WTs6ns8L3gp96JL1Bo5N7e1A6v8cMewyiLXOIQm69NZPv8TBlxZT+muaNLZLqLnT
+# 5CTwy0br+A7JnxqFwDF5PBPS/75hlGger4ZiGT1TdN+2iOMC7E3nJQdv3kIQH1UA
+# 1I4t8cXgYZ80uzqbb9BaQhCVVBeXZdl2K3hPRkn1oG6OpEX+HV4uEdFOF64Z0TAu
+# rzbGHyJqB0t1aDoA/SB107IMDazgA+qYtGNbd94lO05FVTFF7Vj94WFJ7/mY8dOO
+# EMaXcf76y7DejNs7QKjr9kar/QcPS/fbLiK5Se/mh/7argrGACcQExILxStyoUzf
+# M+9VHkxkhyTs2dU=
 # SIG # End signature block

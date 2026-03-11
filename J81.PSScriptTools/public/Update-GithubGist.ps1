@@ -1,4 +1,4 @@
-<#
+﻿<#
     .SYNOPSIS
         Updates an existing GitHub Gist with new content.
 
@@ -48,7 +48,8 @@
 
     .NOTES
         Function Name   : Update-GithubGist
-        Version         : v2025.720.1800
+        Version         : v2025.817.1705
+        LastUpdated     : 2025-08-17
         Author          : John Billekens
         Requirements    :
             - The function reads the PAT from the environment variable PAT_TOKEN
@@ -74,7 +75,6 @@ function Update-GithubGist {
         [string]$GistFileName,
 
         [Parameter(Mandatory = $false)]
-        [ValidateNotNullOrEmpty()]
         [string]$Description = "",
 
         [Parameter(Mandatory = $true)]
@@ -86,38 +86,39 @@ function Update-GithubGist {
     # Define the API endpoint for updating a Gist
     $apiUrl = "https://api.github.com/gists/$GistId"
 
+    Write-Verbose "Updating Gist at $($apiUrl)"
     # Create the body of the request
-    $body = @{
+    $Body = @{
         files = @{
-            "$($gistFileName)" = @{
+            "$($GistFileName)" = @{
                 content = $GistContent
             }
         }
     }
 
     if (-not [string]::IsNullOrEmpty($Description)) {
-        $body.description = $Description
+        $Body.description = $Description
     }
 
-    $bodyJson = ConvertTo-Json -InputObject $body -Compress -Depth 6
+    $BodyJson = ConvertTo-Json -InputObject $Body -Compress -Depth 6
 
-    $headers = @{
+    $Headers = @{
         Authorization = "Bearer $($PersonalAccessToken)"
         Accept        = "application/vnd.github+json"
     }
     try {
         Write-Verbose -Message "Updating Gist with ID: $GistId"
-        $response = Invoke-RestMethod -Uri $apiUrl -Method Patch -Headers $headers -Body $bodyJson -ErrorAction Stop
-        Write-Verbose -Message "Gist updated successfully: $($response.html_url)"
-        $rawUrl = $response.files.$gistFileName.raw_url
-        $htmlUrl = $response.html_url
-        $gistVisibility = if ($response.public) { 'Public' } else { 'Private' }
+        $Response = Invoke-RestMethod -Uri $apiUrl -Method Patch -Headers $Headers -Body $BodyJson -ErrorAction Stop
+        Write-Verbose -Message "Gist updated successfully: $($Response.html_url)"
+        $rawUrl = $Response.files.$GistFileName.raw_url
+        $htmlUrl = $Response.html_url
+        $GistVisibility = if ($Response.public) { 'Public' } else { 'Private' }
         return [PSCustomObject]@{
             GistId       = $GistId
             GistFileName = $GistFileName
             RawUrl       = $rawUrl
             Url          = $htmlUrl
-            Visibility   = $gistVisibility
+            Visibility   = $GistVisibility
         }
     } catch {
         Write-Error -Message "Failed to update Gist: $($_.Exception.Message)"
@@ -128,8 +129,8 @@ function Update-GithubGist {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCbLUP+3OowJCHC
-# BOIlAYTTGH+IiQpMZRu04VtLfNyP86CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCuMgn6uijv2XQx
+# rsBwldw8KJH8wzwJfcypn+ERBbctxqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -305,31 +306,31 @@ function Update-GithubGist {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCCrDZzRhoVdGeReKvFOtBsFc13doon5DeiXigVh56UC
-# bTANBgkqhkiG9w0BAQEFAASCAYAj4uz3Ad0SR+qI5Zc1FwmtFHe/eoCVbzoNJQ5h
-# DB69167nwbwLtjGO9QLcO7QZCvvE0Rl8WGTAt2AcPL9yB99+6090GVtnSPcomM0a
-# acnFyy+cxf89rJvLFW8Go/AWkYpUavbWoLACMX1iBn9oWfTmC/RYllSEEiWrLJfO
-# I4v/fpeoAKSOHtGVg83IdjUTbH+C/NIZYGqWXX/YGBIl7ELJFsOdwn7suJRLvauq
-# SmRp5E0xWSavfQ8tW82yqEe1/wTXIOcyaLnf9gsUlE4QGEmzGPnpuPE5kEHVbgp4
-# p+fEAJfCn/afFY8iOH8V+NBouGifE15uF2j1ZQyp6KLfZQzza9vSKueFS7bKOZAF
-# aGunWIXD/NAKxdur7PrQK/Kf/YHXsy46cS5RR6J4c6oJ335dLGSmvl0WfoWOlfo9
-# pB+Xsl8N4zTk/Q3aGRql7VQ2cZID5cMIBdm/bSF42xTqOZvPQU/9UlmTXzkbULhw
-# 7B+VJPdWu+2SUs/8tT3/WescEDahggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCB6HKt7UYOmP5h2GkWKwTjso/uaxmHe9vnuRoWJYaZg
+# ZjANBgkqhkiG9w0BAQEFAASCAYAclA5dR9ZxOn/2YXtKY8mQT6TyWO/1+F83DskH
+# fbqaJ29whkQWqn3ODVZi2Ea8Gyst8KTwSGVaOKJpq/Zx2ymZitLgkYbjsRQP59It
+# b3V4qVNwH2I/o8Srk58yEYzt0sD/edby+TeJ5FYhfgndocu6qq9sUf7CkopSKXH2
+# DbK8BwiekU40S1F0X/yKM8Ctm051y2lSwKcrso6pVK3hzAZO99KmJqIF/aQw/lpr
+# b/Z0qr8DEe9Wf6nyT++NLwLregU8uNrQSGWFEIyOZHWMsh6/vircpm5SoWSYVFiC
+# 4Y2P3UyfFDebcoxLQ/oYgJy9kWtYKg66bbZGqVgUpxAIFtRFUuhV5+2m++S0rWLO
+# 4Unf3/0oHydQdJBdSA6LYtfGcEQdIGwzWM9aeG3Y7L0Wjv35Fl0nfXpO3BH4JxnZ
+# Fjo9nVC8T3cSQJPtT6VvRm/mPPZ6xHPeoFoYqzjXk1RnBBKpow6zEHkIrVDGmlN9
+# IcGy5Xiq6gM6WgsXI9/Sm8B1yKuhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA3MjAxNTU3MThaMD8GCSqGSIb3
-# DQEJBDEyBDCdZUcoCVazkUX6Z8/cvpwzYVA1D2hYbpRgee3wV8sFIwNLbhh04IM8
-# yGmfSN6/ENMwDQYJKoZIhvcNAQEBBQAEggIAG+cFMqroISaQVX6iev3T+kVQAirU
-# yz+cQybsCsTBpF0POD83dDXz+jVREC3vrayttLlINhrKPKUaU0YVU64mTfiwpAD2
-# 6m0xGDukl/hUFj2hjdugzIMa0WENAtKrU+n3FJzNY8eHXmsOf+oxQat4H/cIggnJ
-# /92xPY1RXlZtsliatSW6YBdZNX9Ysc0jiiwQqpGT1sC9+Kn4OZ/hD4JvDSRnjbYF
-# Oweue61OSlUTQBdCh6hry99li1P72dxrzdJeii92bm4x7fMqrdbes4HSKqyvZAsH
-# WegzqbXOidAnyIGrZqCOIDYAfDFXVrix/Poab11nenPXV9X9HeUw1I8/2xuv5dPa
-# Y8cdxmHRitwhanVaxKYHGPOkrQ5pRGxCJgkL+H5sN4/VqIOZ9gCcJxi5rbgm6CFq
-# tMgiBBuX6f4g7jHYMexYTmfQwEaFyWD/AT0ijc6J3Zsxr8bs0MDdn7nSRqtPqkKr
-# szSG4konX2PuIC3zQaFDa4GT+m0MLL0MjgwLc7JYL1eSSe2fznMU3ZT/vKVY9lh5
-# b4zvrSBzfrjrvyuHF6x9CFcCsKr3sdeqtZQzVUQOo2ZsazYNU0/pEEW2JSt89GWt
-# d1BZK/u13iJO6J040RD8Kc9lCtRVGDjh8FfykzXgahTF9IODTrScAhSqNIr69yOB
-# Va/7IrbgxiNg6s8=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUxNDVaMD8GCSqGSIb3
+# DQEJBDEyBDDLlbGV33FP95J+q1hS+hQ8LCjdvedAZX7/8xyyXpue4K/J5xPFgil9
+# cRCff+YIEaowDQYJKoZIhvcNAQEBBQAEggIAtC1DccQupq0742HQGkLPQszF+vfE
+# q6pLRSqtkICihxURMNCQapzWSIv37LGZ9Inhlzrh2bBsa8Zg89Ls4XABVXGfVHEx
+# ExBGSNfUJvFhAR/Sjnn8uW8+EMGfUae4LydYpsO5kmBxRyR3q+UblJasTg/0lxFO
+# ghdUc2bi7mJU5pG7bs3s26TdROvFa8Q3DyxqNbf7x+PaXFYUu175hqORbZ/L4Yg9
+# +FrReD6/J/+/nrCk0MkSLqQbK1zhmAxQYzyzODc9F7TPNB6+JSuG5NYEdsKCxEfR
+# 74uEirZY/8RrLsJsWQj7nIyEGsSXLLvnA4lcpd6lwvcaL+dHn76A1pSvi37VA+yj
+# KxYgf/oh9lgDnLGBZ7gIihZ2EBKFEqoHnEhiLv8vsJekVsVzIs/G8vQvkrm5sFxY
+# KZ+4V2NjebDAObfAzqJrB/aUPFD79l7tDGldPoFu/ZCdjwllbLmQv++3+JJnedrC
+# Y9K7gxnHXZyZuaorIICBKVf7bauyA+7MGCbTUe/VwmxBagSRqhMaXED7uFrsPdkB
+# g+KDvb3xhec13WpG/sOeSH+bMny/FkdpY5tVRmctRxEr2asP3IZ5Eb/pyGDk5owu
+# lUCCp6kAF1Z2IfMkssXF/3dRWTavFsTPgg6GtGzQat27krnl+bA+w5+cHrgVH2c0
+# gRonGwhhOCO6Rm0=
 # SIG # End signature block

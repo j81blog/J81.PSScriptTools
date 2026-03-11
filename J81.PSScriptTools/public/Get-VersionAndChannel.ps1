@@ -1,123 +1,99 @@
-﻿function Get-GitHubCommitDescriptionByName {
-    <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+﻿<#
+    .SYNOPSIS
+        Retrieves the version and channel from a GitHub release tag.
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+        This script fetches the version and channel information from a GitHub release tag.
+        It determines the channel based on whether the release is a pre-release or not.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .PARAMETER GithubRepository
+        The GitHub repository in the format 'owner/repo'. Defaults to the environment variable `GH_REPOSITORY`.
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    .PARAMETER GithubEventReleaseTagName
+        The GitHub release tag name to retrieve information from. Defaults to the environment variable `GH_EVENT_RELEASE_TAG_NAME`.
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+    .EXAMPLE
+        Get-VersionAndChannel -GithubRepository "j81blog/J81.PSScriptTools"
+        This command retrieves the version and channel from the specified GitHub repository's release tag.
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
+    .NOTES
+        Function Name   : Get-VersionAndChannel
+        Version         : v2025.817.1705
+        Author          : John Billekens Consultancy
+#>
+function Get-VersionAndChannel {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+         [string]$GithubRepository = $env:GH_REPOSITORY,
 
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
-    #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$GithubEventReleaseTagName = $env:GH_EVENT_RELEASE_TAG_NAME
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
+    $Owner, $Repository = $GithubRepository -split '/'
+    $TagName = $GithubEventReleaseTagName
+    $Version = $TagName -replace '^v'
 
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
-        }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+    Write-Host "Repository: $GithubRepository"
+    Write-Host "Tag Name: $TagName"
+    Write-Host "Version: $Version"
+
+    $ReleaseUrl = "https://api.github.com/repos/$($Owner)/$($Repository)/releases/tags/$($TagName)"
+    $Headers = @{
+        "Accept"               = "application/vnd.github+json"
+        "Authorization"        = "Bearer ${env:GITHUB_TOKEN}"
+        "X-GitHub-Api-Version" = "2022-11-28"
     }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
+
+    try {
+        Write-Host "Fetching release information from: $ReleaseUrl"
+        $ReleaseData = Invoke-RestMethod -Uri $ReleaseUrl -Headers $Headers
+        if (-not $ReleaseData) {
+            Write-Error "No release data found for tag '$TagName'."
+            exit 1
         }
+        Write-Host "Release data retrieved successfully."
+        Write-Verbose "Release data: $($ReleaseData | ConvertTo-Json -Depth 5)"
+        $IsPrerelease = $ReleaseData.prerelease
+        Write-Host "Release: '$TagName'; Pre-release: $IsPrerelease"
+        if ($IsPrerelease) {
+            $Channel = 'dev'
+        } else {
+            $Channel = 'stable'
+        }
+        Write-Host "Determined channel: $Channel"
+    } catch {
+        Write-Error "Failed to retrieve release information for '$TagName'. Error: $($_.Exception.Message)"
+        exit 1
+    }
+
+    Write-Host "Storing channel and version in outputs."
+
+    if (-not [string]::IsNullOrEmpty($Channel)) {
+        Write-Host "Channel determined: $Channel"
+        Write-Output "channel=$Channel" >> $env:GITHUB_OUTPUT
+    } else {
+        Write-Error "Failed to determine channel for release '$TagName'."
+        exit 1
+    }
+
+    if (-not [string]::IsNullOrEmpty($Version)) {
+        Write-Host "Version determined: $Version"
+        Write-Output "version=$Version" >> $env:GITHUB_OUTPUT
+    } else {
+        Write-Error "Failed to determine version for release '$TagName'."
+        exit 1
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDKLYvdv0PhDP/P
+# bdGPY1ERHvpAr24AsQVmsBL/qt1+BaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +269,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCA1NT7kkqxOtHInEQDs/dF8C2T2PHUt9tVs6ZS5MLrQ
+# RzANBgkqhkiG9w0BAQEFAASCAYAMfd7A5mL906sur1qtO0LD9F2keK81vEtYl5xb
+# IHJHEVBFOlKb0q5VjE2ySBq9Joez524lWZ6p297ZbWBgUT7BMXdMONDMQGRgu4P+
+# SOCoWNYgdaf9mgnb6kaJdKa3NiBoM+iIC/CHolKIZzhBJ1aoamgQKwI9Rhl/hoVL
+# vcbGpG3wOg8ppsJYH7RYESRr58ppc/VFA5e0+LphZbCiuTxQ2IcxsCOsx9C1Dvn3
+# jtyfMrYjCGO+CjqGQIyYgoG2JwLiRD814p5XVCKpJc6IDxFZYSwOhcLnWFWxE9cB
+# 8HXIe6Um2D2VTpa88FQRoTEZ1UCEZ+AU18b+sw44553CjYPt9ctSFxXCwXPeXXdB
+# N3UG2O5krM0e6aq6P/JLAlFRPVYiLV3X5JWztwR4gHFrQDWdzxThfJL16uzouBX8
+# gqkP71cmm0qMzdFpYvYiFoFg/AwAgdBgPxICWWJS40oBKRG1AouVstZhpRqG+Av0
+# NQIIvFGXWfoUserdD1KeFUsnKiqhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwNTFaMD8GCSqGSIb3
+# DQEJBDEyBDAy4UneFgi63J7YsUrt87yQZOcym+aCP0D1WvZXdeW6QD+v2GTXWsXD
+# tU+cyVmRLxowDQYJKoZIhvcNAQEBBQAEggIAC2t3kS3fHz9n5/AxUHA1NNzPSihT
+# LYaHcFjJOUYZ2DOH8yyT04x+5GzGNgH/E1HANc+PMip1DmjtLZXQNeBjBEZz1jdo
+# Bb/vOxFv3XKPyR4V9DrBDgXx0NqBhB7HEIei1U4jVISoXT1NiBCZ/eggcQSvpOc/
+# j+2jcUSTRkm0FYwGCdKDTy977zXxo+BT8iioSfVudC7aiNOhKMCoG0mX8KRI3+3Z
+# nx173ddyRdhNAkMf2KMamabmB1qHZckWshHPVUbd2g55pBqTvsmLNjt65AssDGrE
+# bNnpEfhEhnU76HG/8mIBhlXB65SqBTIQct/Ptf651/fe5JPSqr9WL1jpdnfyNDta
+# Gp0dsSoyJaJbmXCwy2NvyW8YKmMUFhjhtlttyyuyyYAIXGT7J/15z6kpPlz1wwxw
+# GQgomvHMHUJTiKl+81HTKtS4bKk4/XVLvgnxRNoJdQolXgt4yIxbZ+UTaDVRJrgF
+# sTGzLW5K+DzOpQfLhgAfwlFqGu8TleonhuAvPSjZ0rgBpOZ2x1QUEdKRN6s8Zx/u
+# V4+lFGFRMP8FinmkEpSjcYkn/asiuW9vBb19veLVTPbJpzt8Xyjlvgp8sI/9XGRt
+# vKQwuNxrehlMLoV+HwykgY11nr5b34kidG5oAFweutwbbZNU+1bFA9OkhQ8Pdkg+
+# bRcLmTk8908Rp5k=
 # SIG # End signature block

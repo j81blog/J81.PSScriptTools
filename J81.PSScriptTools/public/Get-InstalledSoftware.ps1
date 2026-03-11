@@ -1,123 +1,82 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Get-InstalledSoftware {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+    .SYNOPSIS
+    Retrieves detailed information about installed software on the local computer.
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+    The Get-InstalledSoftware function collects comprehensive information about installed software packages
+    by combining data from Windows Package Manager and MSI products. It provides detailed properties including
+    product names, versions, installation dates, manufacturers, and product codes.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .EXAMPLE
+    PS C:\> Get-InstalledSoftware
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    Retrieves information about all installed software on the local computer.
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+    .EXAMPLE
+    PS C:\> Get-InstalledSoftware | Where-Object {$_.Manufacturer -like "*Microsoft*"}
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
+    Gets only software published by Microsoft.
 
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+    .EXAMPLE
+    PS C:\> Get-InstalledSoftware | Export-Csv -Path "C:\Reports\InstalledSoftware.csv" -NoTypeInformation
+
+    Exports the installed software inventory to a CSV file.
+
+    .OUTPUTS
+    [PSCustomObject]
+    Returns an array of custom objects containing the following properties:
+    - ProductName: Cleaned product name (version numbers removed)
+    - ProductNameOriginal: Original product name as reported by the system
+    - InstalledProductName: Display name from MSI metadata
+    - VersionString: Version string from MSI metadata
+    - InstallDate: Installation date in yyyy-MM-dd format
+    - ProductVersion: Package version number
+    - Manufacturer: Software publisher/manufacturer
+    - ProductCode: MSI product code identifier
+    - PackageName: MSI package name
+
+    .NOTES
+    Function  : Get-InstalledSoftware
+    Author    : John Billekens
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
-    )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
-
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param()
+    $msiProducts = try { @(Get-MsiProducts) } catch { @() }
+    $packages = Get-Package -IncludeWindowsInstaller -AllVersions -IncludeSystemComponent | Select-Object *
+    $results = @()
+    $versionRegex = '(\s?-?\s?\d{1,5}(\.\d{1,6}){1,3})'
+    foreach ($item in $packages) {
+        if ($productcode = $item.FastPackageReference.Split('\')[-1]) {
+            $msiProduct = $msiProducts | Where-Object { $_.ProductCode -like $productcode }
         } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
+            $msiProduct = try { $msiProducts | Where-Object { $_.ProductName -eq $item.Name } } catch { $null }
         }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+        $meta = ([xml]$item.SwidTagText).SoftwareIdentity.Meta
+        $results += $([PSCustomObject]@{
+                ProductName          = $(try { "$($item.Name -replace $versionRegex, $null)".Trim() } catch { $item.Name })
+                ProductNameOriginal  = $( $item.Name )
+                InstalledProductName = $(try { $meta.DisplayName } catch { "null" })
+                VersionString        = $(try { "$($meta.DisplayVersion)".Trim() } catch { "null" })
+                InstallDate          = $(try { [datetime]::ParseExact($($meta.InstallDate), "yyyyMMdd", $null).ToString("yyyy-MM-dd") } catch { $meta.InstallDate })
+                ProductVersion       = "$($item.Version)".Trim()
+                Manufacturer         = $(try { $meta.Publisher } catch { "null" })
+                ProductCode          = $(try { if ($msiProduct.ProductCode -is [array]) { $msiProduct.ProductCode -join ',' } else { $msiProduct.ProductCode } } catch { "null" })
+                PackageName          = $(try { $msiProduct.PackageName } catch { "null" })
+            })
+
     }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
-        }
-    }
+    Write-Output $($results | Sort-Object -Property ProductName | Select-Object -Property * -Unique)
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCtx8StbXbaWW+z
+# 6qlqbR+CN+RWEJ4xY3JwjkyXe3YNqqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +252,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCR3Cll4lFfWg0X2H25QXmy5YMpfpnjRUfnNcUiKLXF
+# KDANBgkqhkiG9w0BAQEFAASCAYA3as8UwZVe48FgU5zNldCQBgEgLcR/Ntm2dJ4J
+# gV+WZ5T7LnUxqJfeBIRHesp6K6qkGCZxVcgawEgzEqAOE4ReOZRdxAhtKwDklyp7
+# 7JznhxmsN+k7fOfL3EYWC/9ahsIRT+//D+R2pZ4foPozjnRtHY4lF6Hr1nkK7i7E
+# t1daFx50JfU/H14fhBLrOC6NEZ/RlIyT67XFcpr1g+n4qiAHOU/w7VdMEMlCFvm8
+# pIGfXcHL4rtPBQeXrLxIiNuOXzO5SbuIvuwXcFUhj8vfR9PP/E6MaKi9jyzwsiOd
+# huVEDgfB5+o0EFTUX6xAYiSPfCeq/I+XI0uOWjMpedIUsQpyIHVuMEQ4MjJsx4cj
+# Z5bhbfProwZqv5a4J9dmxSeVojbPrkfc+vfuHE1j+SuCSM+Vt2Li1alWr+4tmFp8
+# no80JW8T/szBL79N4kv2U5ejdpdRg0PkDUs8hwiXdhmGEYUfYeLvS+/6Erf8eZ7o
+# eXQpMiUtGCsfp15V3Fpp+6Nv7yihggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzNaMD8GCSqGSIb3
+# DQEJBDEyBDBYHpIDA/Lkdia+t4YrjBgotxccqeIjkyh8kic309SaFN9t242FZDA+
+# CTJ33fAKy8UwDQYJKoZIhvcNAQEBBQAEggIAvGnlFStk0Kb7MR0/xwP3jDLRDztz
+# Hle8+JkSM0NrxGU7l6PZPJSXs+So2tRmnLpqGNqtTqo5SRkiHfh0n3hZVf3RU774
+# 0Ouv2CHIxDnEd4pFy/NRQHyRGBjMAhAkPUaF/utlG8Ja5CmZ4SbYxqORSZpWDzKk
+# WhGJPrfRDcHTFXq/1yUutliE2H6T4TvDNdpnax/AFVCpbzyIkK38EsZGH3WdArQp
+# eL4HIF9xAgH4X8u4gzfHunQQzEpAfbtHUHz/VqvL01nGOOnJeMR1uW5xdwDM8TxM
+# MbM+sJ5blHsCQe+OsLPFkQH+LD0yjAUkTqqDu4jLjWL0Dpe22LPPa2PiWryCj6qV
+# BVeyWfJCxZh6T/t17HDgmnso6aZ+VWXMuNWsYjh0xstb/Iwt7FwEVhUgb19CW/UL
+# XcmBmBma6H4q77xZJso7Mn/+MMaZWjF2ZIwDdnYjCnaYoP0HKPDmtsS4qJ0PaanG
+# YXYuHlhouU2W7TOLq0sZS2ez6G0RQFFjRBZ7Rx0kN8YtQ816V084IrnkiuHq7oEb
+# jqYUTmbmHCW6kqAKahtsEt5AAE3QDEMrSpYCRBV3r6XQPQ0/DJ1XoZ7y8l0kYPJB
+# jVZuD8dTRLnHmApRDf+gM/XZxTWjYXMxRTPAjpZ1yDf+QohLaowStgf82CYBff1h
+# O0EOmpdQ5diGMxA=
 # SIG # End signature block

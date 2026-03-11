@@ -1,123 +1,68 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Get-SortedReportItems {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+    .SYNOPSIS
+        Gets and sorts inventory items by their Report.Order metadata.
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+        Reads the AvailableItems array from inventory data and sorts them by
+        their corresponding {Item}Report.Order values. Items without Order
+        are placed at the end.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .PARAMETER InventoryData
+        The inventory data object (PSCustomObject from JSON).
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
-
-        .PARAMETER Repository
-            The name of the GitHub repository.
-
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
-
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+    .OUTPUTS
+        Array of item names sorted by Report.Order.
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+    [CmdletBinding()]
+    [OutputType([array])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNull()]
+        [PSCustomObject]$InventoryData
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
+
     try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
+        $availableItems = @($InventoryData.AvailableItems)
+
+        if ($availableItems.Count -eq 0) {
+            Write-Log -Message "No items found in AvailableItems array"
+            return @()
         }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
+        # Create array of objects with item name and order
+        $itemsWithOrder = foreach ($item in $availableItems) {
+            $reportProperty = "$($item)Report"
+            $order = if ($InventoryData.PSObject.Properties[$reportProperty] -and
+                $InventoryData.$reportProperty.PSObject.Properties['Order']) {
+                $InventoryData.$reportProperty.Order
             } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
+                999  # Default high number for items without order
             }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
+            Write-Log -Message "Item: $item, Order: $order"
+
+            [PSCustomObject]@{
+                Name  = $item
+                Order = $order
+            }
         }
+
+        # Sort by Order and return just the names
+        $sorted = $itemsWithOrder | Sort-Object Order | Select-Object -ExpandProperty Name
+        Write-Log -Message "Sorted $($sorted.Count) items by Report.Order"
+        return @($sorted)
+
     } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
-    }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
-        }
+        Write-Log -Message "Error sorting items: $($_.Exception.Message)"
+        return @()
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCslyYtUVHEqWQd
+# ImCyyp3X10o0DvsVE/XfOc2RqBZyN6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +238,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCBX04OE/o9gmoWhRLxSqN4sagtTKI878N6gWKXiYFSi
+# ZzANBgkqhkiG9w0BAQEFAASCAYDHBndTyfgqIKo2xKcvLnWAjqGJja2rd+PVUqEW
+# T7kIF0TUNHKqxPd368s2VfGQFTpOkKDUHKIPrCWM2xZAYYtgOQOB90rt8ggLkD/X
+# SA/ZQLiSRgHDIWoavVjMelP8JFkLIRh5io/QKd+nqwdu0ugxc815pL9e3beNhHcn
+# Gx4K/4v4YGue5DtBExBfRJ0Xk99GeQIShc2ysS8k5a7VrxDbFSpsybirwm8PZTxT
+# CzQGNHb3VpH/fxm9HAUOoel2u7N89L6EsJtwy4im3k41CQb63ibLB/sNYzeMRF+V
+# +k/uM2YQ3Z2uK5P9/BCyf0QVHwPz9CmzGV/CHk/KJ20DvqxlUDh/kI7FVsDwVpI0
+# vKCB+xxCrJk+ibNFrfMyBgE/diK91Y65eioANSwhddZ/V+lxA91xDbcslipPQ1s0
+# A/d7RJgokVSspNDweXHhJJskLl0+uiigOrWLLlYPBDxek2AWxpH/9JATI8sCzR3E
+# mFkjQskm2axvjdT4zAiV8b+47N2hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMDBaMD8GCSqGSIb3
+# DQEJBDEyBDCRYCzg41L3IQG0fxMZjHadjy7tWMqomr1xPCRKgt1TAPTTTLwKMDcA
+# WeccPnOEavMwDQYJKoZIhvcNAQEBBQAEggIAr0TFso0M7LJqOs4Tb3sGTG6H2MYC
+# PmdI0Uc52aa+OFG2NOO1NYx+Hf3BfHuHRKpY27xFGZ91JHslgcj7DueBK7LLt8F5
+# fhn8ZFjjK/AnkGtg3fKXBmo2o+CNDS/DuIJsFblrYg/621mellFIc7AcRBtliWC7
+# kSu0BqPioBf5rX2dvM/SbqIoHUIxlWu9EvBODR4NRasOnvCBKO+4uvHpn56IrKuC
+# rAV/nSts4+iALbVhJi/T0tEpDFo3s9g/HmyhS+OKUNyRmVnj5Hp8S9vcVc4oXPbS
+# Xx6bcQ15zWzgMKCP907XGQ/9VpFo2yTrFed9jdOIdzxvyMT9JeXB1vWYIFZUWn2W
+# mErCdLGd7CEAKr7n9nXJ2XzbxcRYmRfAU5CQfBdiMRsVVy42U8xLB9mnmyjPWoYq
+# Q/hJ7KW0kosyJgbP/EATa87r+WIj3q/PRpSkGVdUANgUxRHPB0KyenFo38WFbmpA
+# nGSEk7g4NUdwmYOYFBNgh/iu31qPPa3GABiWJQ4gKHl4p5D0qibvUiCkRSG5SFfA
+# xXjO223UKfaWMx9POwYcSH8bVXjyo0s9wbIINlEys2HppAuaqtuzNGQ45/Q8CTuF
+# /cMM2hsGeJN7DuiAXZuSjmYp2ckkhXR9oQUzqnjqyhW/aIsVr2SRTwTxOLY3bfBm
+# /BeV2lHdC0HtSOw=
 # SIG # End signature block

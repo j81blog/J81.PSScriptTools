@@ -1,123 +1,101 @@
-﻿function Get-GitHubCommitDescriptionByName {
-    <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+﻿function Save-Inventory {
+    [CmdletBinding()]
+    param(
+        [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json",
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+        [ValidateNotNullOrEmpty()]
+        [string]$Item,
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
-
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
-
-        .PARAMETER Repository
-            The name of the GitHub repository.
-
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
-
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
-    #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+        [ValidateNotNullOrEmpty()]
+        [hashtable]$Data
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
+
     try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
+        # ===== Update or Create JSON File =====
+        Write-Log "Updating SystemInventory.json..."
+
+        $inventoryData = [ordered]@{
+            ComputerName = $Env:ComputerName
+            LastChanged  = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+            AvailableItems = @()
+            SystemInfo = @{}
         }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
+        # Load existing JSON if it exists
+        if (Test-Path $InventoryFilePath) {
+            Write-Log "Loading existing JSON file..."
+            $inventoryContent = Get-Content $InventoryFilePath -Raw -Encoding UTF8 | ConvertFrom-Json
 
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
+            # Convert PSCustomObject to Hashtable for easier manipulation
+            $inventoryData = $inventoryContent | ConvertTo-Hashtable
+            Write-Log "Existing data loaded successfully"
+        } else {
+            Write-Log "Creating new SystemInventory.json file..."
+            $inventoryPath = Split-Path $InventoryFilePath -Parent
+            if (-not (Test-Path $inventoryPath)) {
+                New-Item -ItemType Directory -Path $inventoryPath -Force | Out-Null
+                Write-Log "Created directory: $inventoryPath"
             }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
         }
+
+        # Add or update item data
+        $inventoryData["$($Item)"] = $Data["$($Item)"]
+
+        # Add Report metadata if present (nested structure)
+        if ($Data.ContainsKey("$($Item)Report")) {
+            $inventoryData["$($Item)Report"] = $Data["$($Item)Report"]
+        }
+
+        # Add LastChanged timestamp for this item
+        if ($Data.ContainsKey("$($Item)LastChanged")) {
+            $inventoryData["$($Item)LastChanged"] = $Data["$($Item)LastChanged"]
+        }
+
+        # Update global LastChanged
+        $inventoryData["LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+
+        # Update AvailableItems array (exclude SystemInfo)
+        if ($Item -ine "SystemInfo") {
+            if ($inventoryData["AvailableItems"] -is [array] -and $inventoryData["AvailableItems"].Count -gt 0) {
+                $inventoryData["AvailableItems"] += $Item
+            } else {
+                $inventoryData["AvailableItems"] = @($Item)
+            }
+            $inventoryData["AvailableItems"] = @($inventoryData["AvailableItems"] | Select-Object -Unique)
+        }
+        # Convert to JSON and save with proper UTF-8 encoding
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            $inventoryData | ConvertTo-Json -Depth 10 | Set-Content -Path $InventoryFilePath -Encoding utf8NoBOM
+        } else {
+            # PowerShell 5.1 - Use StreamWriter for more reliable UTF-8 without BOM
+            $jsonContent = $inventoryData | ConvertTo-Json -Depth 10
+            try {
+                $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+                $streamWriter = [System.IO.StreamWriter]::new($InventoryFilePath, $false, $utf8NoBom)
+                $streamWriter.Write($jsonContent)
+                $streamWriter.Close()
+            } catch {
+                # Fallback to File.WriteAllText if StreamWriter fails
+                [System.IO.File]::WriteAllText($InventoryFilePath, $jsonContent, [System.Text.UTF8Encoding]::new($false))
+            } finally {
+                if ($streamWriter) { $streamWriter.Dispose() }
+            }
+        }
+        Write-Log "SystemInventory.json updated successfully at: $InventoryFilePath"
     } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
-    }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
-        }
+        $errorDetails = Get-ExceptionDetails -ErrorRecord $_ -AsText
+        Write-Log "ERROR updating SystemInventory.json: `n$errorDetails" -Level "ERROR"
+        throw $_
+    } finally {
+        $Script:LogFile = $null
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDXsXpZtBHio08p
+# +ZZwul4MLjXtquktoXi1O4y8tyCl16CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +271,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDVxCSkdqUTMo7mSTCWlyrmAmLbkT+Cgq4XlCmXIkq1
+# 7zANBgkqhkiG9w0BAQEFAASCAYCgLl6Omk+GtA2bj+jzc3ExBeizjLRQUOak6OsO
+# xks2ouYSa7WzQsM53q54eSCttRviHhwtFSnSiuSCARQYmJNVoZrEmn2oLlX5fXWZ
+# Cc7GLFYJ/JswAVxTj7MUmFhq5EkR4zDeiiCAszC93W0n6KyGmcAUtUYLEC6kRCrk
+# CrlieyRl3cGBGBftQ6sOhJRuOli937T8rkRj58DHQlnb4PH22NFhFvYooPtbJ7Qr
+# SpQbHV0OrxhVWqnqkearBgw0XcqCrJo+5dxBMPkVcJxg05YlJNrauSZPudC+9UzG
+# /kJMG7PixStR1thHMgUcs4aMcqwKjpVEjsBZo8TZ+D0Xs5oQV/m33ECvfZdYI03t
+# l6DumRyFMg7FcSEH+L8TOJyJsSQ58lQ8SeFk4MxG4GDGPvfjR0+NbFEQnG7E6/yd
+# vbH2zkZlk3xnXJsORgM+AfDlPbu17U59AXgHJNja4y0eY+KNsCLhO79fqO3apgUh
+# HSe6Xwl0vvxSxpY3NVgYymvLAO6hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMDlaMD8GCSqGSIb3
+# DQEJBDEyBDBRYdTXvXQPudvyCCBgvnCYwqWurXhov5C4njvf0NDcj03D8ZrGEbsi
+# 2JzkvxRQt54wDQYJKoZIhvcNAQEBBQAEggIANxk7nCrF4sRBxsiYPNSZRI15pazH
+# mcMF7BGYH7g4h1grwC/uHZjvZXqV1fXG6a6tuRFZ2pek/xxZpc+Y4295f5ROKGNc
+# k1Aa67ZvgPtv3t7hx9jdI+acPRhKuS5VmpTOQaETlPB8M3cfDALBrpul2oRgkhjI
+# iI2Fcxt+ykcEbYr1xFVyvMT1ZTg0ZAxYcHKH7x9qbirrL+ZOS/6aj9+rAjFy9AaN
+# ON9dzRGOaNYyZDWvumyR3duscL7SHsa1QY4ZvFdA5mmS7xt6P0Bnz+Erv4SAdkJd
+# PTYTuaXrbZLYYO39RvKWrR7A+WuzxumkAFVier9J6uclbnTVopc+g6ICrjBHl9gs
+# 8+qi88TFBT/Q/OhhiitHkvG/u7XKj31OnBf1SJnTxyKFEbLvWWoB+kVBrZiG5XwQ
+# kcqqgLd30TIJBUgOQWNisRzBwK7457COhTE6px+8YkseANfmGbiHvHFhdZjo3ERZ
+# Ez01nWQ5yryn9cMgP9tidUBWL9wR14lVTUdVd+WwsD50mb/hOvM6AHdVdJh7kMHX
+# PghmyNxA6IUaxo7SE0wzePlDmJdOOMKOdwrMpg/KDfthf2inyghF31MKizYc6aWY
+# YnE8awL3Sng2/vggphIUvafxa5Mi1DAydUwO+QvSLiWNpSHGy099dFaAWZnEmoGH
+# faleb00gGAhZvZ8=
 # SIG # End signature block

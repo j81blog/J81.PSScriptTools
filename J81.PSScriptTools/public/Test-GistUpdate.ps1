@@ -1,123 +1,94 @@
-﻿function Get-GitHubCommitDescriptionByName {
-    <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+﻿<#
+    .SYNOPSIS
+        Tests the update functionality of a GitHub Gist by checking if the version is set and contains release notes.
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+        This script fetches the content of a specified GitHub Gist and verifies if the version
+        is set correctly and if the release notes for that version are present. It is used to ensure
+        that the Gist is ready for updates before proceeding with any changes.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .PARAMETER GithubRepository
+        The GitHub repository in the format 'owner/repo'. Defaults to the environment variable `
+        GH_REPOSITORY`.
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    .PARAMETER GithubGistID
+        The ID of the GitHub Gist to test. Defaults to the environment variable `GIST_ID`.
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+    .PARAMETER GithubGistFilename
+        The filename in the Gist to test. Defaults to the environment variable `GIST_FILE`.
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
+    .PARAMETER Version
+        The version number to check in the Gist. Defaults to the environment variable `VERSION`.
 
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
-    #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
+    .PARAMETER Channel
+        The channel to check in the Gist. Defaults to the environment variable `Channel`.
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
+    .EXAMPLE
+        Test-GistUpdate -GithubRepository "j81blog/J81.PSScriptTools" -GithubGistID "1234567890abcdef" -GithubGistFilename "changelog.json" -Version "1.0.0" -Channel "stable"
+        This command tests the specified Gist to ensure that the version 1.0.0 in the stable channel
+        is set correctly and that the release notes are present.
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
+    .NOTES
+        Function Name   : Test-GistUpdate
+        Version         : v2025.817.1705
+        Last Updated    : 2025-08-17
+        Author          : John Billekens
+#>
+function Test-GistUpdate {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$GithubRepository = $env:GH_REPOSITORY,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$GithubGistID = $env:GIST_ID,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$GithubGistFilename = $env:GIST_FILE,
 
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Version = $env:VERSION,
 
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Channel = $env:CHANNEL
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
+
+    $owner, $repository = $GithubRepository -split '/'
+    Write-Host "Owner: $owner, Repository: $repository"
+    $gistRawUrl = "https://gist.githubusercontent.com/$($owner)/$($GithubGistID)/raw/$($GithubGistFilename)"
+
+    Write-Host "Testing Gist update at $($gistRawUrl) for version $($Version) in channel $($Channel) to check if the version is set and contains release notes."
     try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
-
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
+        $json = Invoke-RestMethod -Uri $gistRawUrl -ErrorAction Stop
+        Write-Host "Successfully fetched Gist content for testing."
+        if ($json.channels.$Channel.version -eq $Version) {
+            Write-Host "Version in Gist matches the expected version: $($Version)."
         } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
+            Write-Error "Version mismatch! Expected: $($Version), Found: $($json.channels.$Channel.version)"
+            exit 1
+        }
+        if ($json.changelog.$Version -and $json.changelog.$Version.notes.Count -gt 0) {
+            Write-Host "Release notes for version $($Version) are present in the Gist."
+        } else {
+            Write-Error "Release notes for version $($Version) are missing in the Gist."
+            exit 1
         }
     } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
-    }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
-        }
+        Write-Error "Failed to fetch Gist content for testing. Error: $($_.Exception.Message)"
+        exit 1
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAv5LlnMsJuqlMi
+# VIlFJCKWbVXj6427yTPVbVvEDtKbH6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +264,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCAfxD2P2qE3LIH+xPQt8xvQ8rPlnd1PaVc37n0Iwy8i
+# vjANBgkqhkiG9w0BAQEFAASCAYAImj9hIdTFJmZHQOu21lZYe0hesdDrIZSj7h+P
+# eiVvRpB5SmFAoqxHDcsCrpLWWGhWFvwRlIanmYlz2F7zCR4fOELaHCAUbuY9eYpg
+# ZEOzeYpfsGOswxaDQ3Pqg0Uv/DEdUFAs9tuJnKfqLdhhIt5PIxywt0ybt51MjOvN
+# jXGAvQbLunZiWuo+YQr0xAB68h0rudhLzG/tsM8HF2Hp4bIl/alVesm9ZO6dKyp2
+# zz8mdUDsy4lVLdgVptdlT8c0i17U0Q983oQnxC8bLmkDYEXwb7YSR4DMuQvXsd5t
+# MG6WK0amOrJt5NGKRI0q0rFeE0oCU2bUTmPyJexhtw4+XZl9BslTg+swvODfYTjT
+# KiaEyO1l4XGbdJt1gwAL3qRbr1RDBRecULxTHJbOPEL15FmF0ftiOoORjhXU7rf8
+# FY3ZMoDKgRISQkTsO4W7xsz52ocArGIWohqNqsaLAhA0odinqyxX6j9CNSA55xAn
+# F6sKyQWKrEvC717UuKS6JPN4XiChggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUxNDJaMD8GCSqGSIb3
+# DQEJBDEyBDCX1sfsarF05ksLQfGOGXhVBZSK8yo5U0YzDB5M5fdOfZHjGJb7HiDh
+# X4PMgd6kDgswDQYJKoZIhvcNAQEBBQAEggIAtMo9GJK2Hpsm5M46lHsHvUVxYDay
+# JRRuMEwKYpbIRocSitlE5C5Kl66UIFw3AE3eOVlAI/EN/6q3TXQuySXIFLbIuAvR
+# kSVK1z1ATvT8q/66YfOdQUCpK2F5r1RsaStsVYv0JgmZw93QBD8FFC+ITAZstpWV
+# QA3poGwjXcoPDh28jDY4B92lPnXb82ex/qswPLp+58hFj5AslhyxzIKDn//SgQj7
+# JpggDWcFDKruOPG+8gluJdpdIpUYi5PsQClaJSpV6M73KJOMiCxOQxabqXysw9/e
+# wQXgj1Y9NIyf3qqtMC/dvC0E60ZH/Ac7Oplzy03hSP27ajnGFsTUnJOaf4kiRutA
+# VsPPitVGyJUZ6hGmfTKBPUuHIw6r8VCqQQh/uU1R0uGjMEyOoK4+gWou2skn6v0O
+# QTUTH+wm+K+EjQJPQkCbwP67q9lFQPKEt3ID22Aix4GZJS7yJiKYrfnsfYYrCsY1
+# oCqwcd5GaLp5e3se2Xf0GpZ0IBNlKaOwf70ra+YCOEyNsbZQa0JvCHs+g6Mk2KWI
+# nRZq8VgQBpVSRCSVjLf4Om1CtZa5NLntPa4UO0lUQXOxzvytUGeFVdN9jMwQJoNm
+# CZl2Edrv0jgAj32Mnwe1Dx/SZJATLc3uR8baSo6ZcVpGIEUM6vezBxvs4h2nThjP
+# pZACRuMIDxzjdGk=
 # SIG # End signature block

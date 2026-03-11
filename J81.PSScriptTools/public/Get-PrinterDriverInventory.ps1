@@ -1,123 +1,150 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Get-PrinterDriverInventory {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+    .SYNOPSIS
+    Collects installed printer driver information for system inventory reporting.
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+    Retrieves detailed information about installed printer drivers on a Windows machine,
+    excluding specified drivers, and integrates the data into the system inventory reporting
+    framework. The function collects driver details including name, version, manufacturer,
+    and environment information.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .OUTPUTS
+    [PSCustomObject]
+    Returns printer driver inventory data integrated into the system inventory framework
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    .PARAMETER Exclusions
+    Array of printer driver names to exclude from the inventory collection.
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+    .PARAMETER InventoryFilePath
+    Full path to the system inventory JSON file where the printer driver data will be stored.
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
+    .EXAMPLE
+    PS C:\> Get-PrinterDriverInventory
+    Collects all installed printer drivers (excluding defaults) and saves to the default inventory location
 
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+    .EXAMPLE
+    PS C:\> Get-PrinterDriverInventory -Exclusions @("Generic / Text Only", "Microsoft Print to PDF")
+    Excludes additional drivers from the inventory collection
+
+    .EXAMPLE
+    PS C:\> Get-PrinterDriverInventory -InventoryFilePath "C:\Custom\Inventory.json"
+    Saves printer driver inventory to a custom location
+
+    .NOTES
+    Function  : Get-PrinterDriverInventory
+    Author    : John Billekens
+    CoAuthor  : GitHub Copilot
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNull()]
+        [string[]]$Exclusions = @("Generic / Text Only"),
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
-        }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+    begin {
+        Write-Verbose "Starting $($MyInvocation.MyCommand)"
     }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
+
+    process {
+        try {
+            $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
+            Import-Module -Name PrintManagement -ErrorAction Stop
+
+            # Retrieve Installed Printer Drivers
+            Write-Log "Retrieving installed printer drivers"
+            $installedDrivers = Get-PrinterDriver | Where-Object { $_.InfPath -notmatch "printqueue.dll" }
+            $filteredDrivers = $installedDrivers | Where-Object { $_.Name -notin $Exclusions }
+            $inventoryResults = @()
+            foreach ($driver in $filteredDrivers) {
+                Write-Log "Processing printer driver: $($driver.Name)"
+                try {
+                    $driverInfPath = $driver.InfPath
+                    $driverFilename = "$driverInfPath".replace("C:\WINDOWS\System32\DriverStore\FileRepository\", $null)
+                    $driverParentFolder = Split-Path -Path $driverFilename -Parent -ErrorAction SilentlyContinue
+                    $driverInfFileName = Split-Path -Path $driverFilename -Leaf -ErrorAction SilentlyContinue
+                } catch {
+                    Write-Verbose "Failed to process INF path for driver: $($driver.Name)"
+                    $driverParentFolder = "Unknown"
+                    $driverInfFileName = "Unknown"
+                }
+
+                $major = ($driver.DriverVersion -shr 48) -band 0xFFFF
+                $minor = ($driver.DriverVersion -shr 32) -band 0xFFFF
+                $build = ($driver.DriverVersion -shr 16) -band 0xFFFF
+                $revision = $driver.DriverVersion -band 0xFFFF
+                $driverVersion = "$($major).$($minor).$($build).$($revision)"
+
+                $inventoryResults += @{
+                    Name               = $driver.Name
+                    Provider           = $driver.Provider
+                    Manufacturer       = if ($driver.Manufacturer) { $driver.Manufacturer } else { "Unknown" }
+                    Version            = if ($driverVersion) { $driverVersion } else { "Unknown" }
+                    MajorVersion       = $driver.MajorVersion
+                    InfPath            = $driverParentFolder
+                    InfFileName        = $driverInfFileName
+                    PrinterEnvironment = $driver.PrinterEnvironment
+                }
+            }
+
+            # Save Inventory
+            Write-Log "Saving SystemInventory..."
+
+            $inventoryData = @{}
+            # Add or update PrinterDrivers section
+            $item = "PrinterDrivers"
+            Write-Log "Saving $item..."
+            $inventoryData[$item] = $inventoryResults
+            $inventoryData["$($item)Report"] = @{
+                Order        = 7
+                Title        = "Installed Printer Drivers"
+                ReportFields = [Ordered]@{
+                    Name               = "Name"
+                    Version            = "Version"
+                    Manufacturer       = "Manufacturer"
+                    PrinterEnvironment = "Environment"
+                }
+                SortBy       = @("Name")
+                SortOrder    = @("Ascending")
+                Highlight    = @{}
+                Searchable   = $true
+            }
+            $inventoryData["$($item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+
+            Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $item
+
+            Write-Log "System information collection completed successfully"
+        } catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Log "Inventory file path not found: $($_.Exception.Message)" -Level "ERROR"
+        } catch [System.Management.Automation.CommandNotFoundException] {
+            Write-Log "PrintManagement module not available: $($_.Exception.Message)" -Level "ERROR"
+        } catch {
+            Write-Log "Important Error details:"
+            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+            Write-Log "An error occurred during printer driver inventory collection: $($_.Exception.Message)" -Level "ERROR"
+        } finally {
+            $Script:LogFile = $null
         }
+    }
+
+    end {
+        Write-Verbose "Completed $($MyInvocation.MyCommand)"
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCH0hmLdbgjUhaF
+# cpkMRaY/SXO96P/TZm0N8NB7uCao8qCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +320,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCvB3Ty0lUVI5jskm4IRTvlDhC1rLULbk2nysMheBxf
+# gTANBgkqhkiG9w0BAQEFAASCAYB7+ouvsIdRQIt8klmJ9zoJDTVexMlE141PgFm3
+# gLsw86B9Nc4BFae89NpyAlF1LFVbhmEYpG/e5yrOBFzVyrpUvRu6YFL2seaty3fc
+# UkKbPUrZisFAD/z0P0pQuWMnZa35impEhDLejcuOD9/dtbsRhci38L4X0TUHzjbm
+# VP6SlEE98Z70FUNuQG3EIZsXOCxALKgIswZZCxrviqnOLj8dQn0CeIYi2KvessaE
+# 9/hJmehC1bFSZk6M5EsL+uF8G21IZf3hU9nFwbD0J6euCMBBOrYKRYBZP7WaJtVW
+# eQ3YvYG4Y3C4UpZk6qDfxn6GM02DWQ66Gw4UBNOv1Y0xXBSnIuxxTpHiOIjL72Qs
+# O+uWXBYVSdLV/cvIm8Cx66fnKmESu4uDMtJL59VwI40EzBc+DxapJyQX6OKfitcN
+# m1mEdFCWjJs+IhuuvjtqZjt8mjdliXwqgDGdOoezd0QbZPDBAOhxwwQH1WZd652p
+# W0FOk5GNUj/dHFcP98AQV5EqvbWhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwNDJaMD8GCSqGSIb3
+# DQEJBDEyBDBk8qmLF2H/oeAsyLMQCG4UgB0NrqV/wrYqOxs/jmuiBiRncjipMwiq
+# tSpR5UIetwswDQYJKoZIhvcNAQEBBQAEggIAqH431MQjD722J3L4bS40cO4xPwhN
+# dy6LMpbK+ZzWhJv4n8yeCKMW53ZcgbMJG0EZJtRDP/+K0ciHASwE5V2i6rBsnhvo
+# 0YllkWhc4qVDLQy+vBnI31utUFqDvDi+vsFxx5YIXEwuy354WmsigdDKT7KMBXpf
+# 1xXD1Jg/qHrOAU7IhykmKBgYm6ppmxjD2a/q08QSPP5OKC8QdjDkJSPuC99NQmAk
+# L/ZUmJlGT+3NRfVF0ZiliHvrBrWkIYNl4IUlZej2yB1VK1XxsEmGarCMmdT4kLWl
+# 27Jy8r0YDW8kcieUCXb9+UbCXde6Farx2+aSnw+lA7bg9N+XFWcz5n9ipwrGwpUZ
+# QIubFsnf93GNJG/WOdDz13sx4er8PN+CuxmPlyQIiPzXTECTKc43p4es71i6/cYx
+# AmtfcXe50tK/Giabfy14HqYeHfj56dF9DKS3T1kgXwg6FgFxEU7ztzYSVXPrnK9G
+# KIH6SUAnLzJNlbHqcQBPeV06YXen773W2BvMnXY//nOMra+yF8eu+g/Z9SaDT6eT
+# ZSly+C96V2tbQ8P3P5ttDjAo4rR4T0fs4r4EM5u/SXLcOV15NLfqlYIeOYIu24Bz
+# CvnXp4mIujjTJa/vJPi/3ly87AcmpPViXm2sH0W6C4wer/xsIhRVyWEe0QLWa3NM
+# JvK8+ojlXW7NxsM=
 # SIG # End signature block

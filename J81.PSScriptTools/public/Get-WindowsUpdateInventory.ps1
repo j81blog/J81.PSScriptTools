@@ -1,123 +1,121 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Get-WindowsUpdateInventory {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+    .SYNOPSIS
+    Retrieves Windows update history inventory and saves it to the system inventory file
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+    This function collects information about all Windows updates installed on the system,
+    including their installation date, KB number, result status, and other details. The data
+    is formatted and saved to the specified inventory file for use in system reports with
+    proper color coding for update status (succeeded/failed).
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .OUTPUTS
+    [System.Void]
+    This function does not return objects but saves inventory data to the specified file
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    .PARAMETER InventoryFilePath
+    The path to the system inventory JSON file where the Windows update data will be stored.
+    Default: "C:\ProgramData\SystemInventory\SystemInventory.json"
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+    .EXAMPLE
+    PS C:\> Get-WindowsUpdateInventory
+    Collects Windows update history information and saves it to the default inventory file
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
+    .EXAMPLE
+    PS C:\> Get-WindowsUpdateInventory -InventoryFilePath "C:\Custom\Path\Inventory.json"
+    Collects Windows update history information and saves it to a custom inventory file location
 
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+    .NOTES
+    Function  : Get-WindowsUpdateInventory
+    Author    : John Billekens
+    CoAuthor  : GitHub Copilot
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+    [CmdletBinding()]
+    [OutputType([System.Void])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
-        }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+    begin {
+        Write-Verbose "Starting $($MyInvocation.MyCommand)"
+        $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
     }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
+
+    process {
+        try {
+            # ===== Retrieve Windows Updates =====
+            Write-Log "Retrieving Windows updates"
+            $inventoryResults = @(Get-WindowsUpdateHistory | Sort-Object -Property Date, KB -Descending | Select-Object -Property @{ Name = "Date"; Expression = { $_.Date.ToString("yyyy-MM-dd HH:mm:ss") } }, KB, Result, Title, Product, Category, SupportUrl, RevisionNumber, Description)
+
+            # ===== Save Inventory =====
+            Write-Log "Saving SystemInventory..."
+
+            $inventoryData = @{}
+            # Add or update WindowsUpdates section
+            $Item = "WindowsUpdates"
+            Write-Log "Saving $Item..."
+            $inventoryData[$Item] = $inventoryResults
+            $inventoryData["$($Item)Report"] = [Ordered]@{
+                Fields = [Ordered]@{
+                    Date     = "Date"
+                    KB       = "KB"
+                    Result   = "Result"
+                    Category = "Category"
+                    Title    = "Title"
+                }
+                Order        = 2
+                Title        = "Installed Windows Updates"
+                SortBy       = @("Date", "KB")
+                SortOrder    = @("Descending", "Descending")
+                Highlight    = @{
+                    Result = "Succeeded"
+                }
+                Format       = @{
+                    Result = @{
+                        Succeeded = @{
+                            color = "lightgreen"
+                        }
+                        Failed    = @{
+                            color = "lightcoral"
+                        }
+                    }
+                }
+                Searchable   = $true
+            }
+            $inventoryData["$($Item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+
+            Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
+
+            Write-Log "System information collection completed successfully"
+
+        } catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Error "Item not found: $($_.Exception.Message)"
+            throw
+        } catch {
+            Write-Error "An error occurred during Windows update inventory collection: $($_.Exception.Message)"
+            Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
+            Write-Log "Important Error details:"
+            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+            throw
+        } finally {
+            $Script:LogFile = $null
         }
+    }
+
+    end {
+        Write-Verbose "Completed $($MyInvocation.MyCommand)"
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDDCbPSZnMx2pIt
+# 8S5zxpMNrzGeX3GMJrIgZs86dy7nx6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +291,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCA7hpJKshfiXxBsDduTWR+swnV+MiwRnMDUBHFck6Jz
+# OzANBgkqhkiG9w0BAQEFAASCAYBUtIEdQ0rZKFVYD9js5rEgJeGMx/pTpKPAwh+U
+# JdEp8zZkeg7ym47lAqvOwwj6D1n7PoBDBp+9YYEXtZ/kDWXwG0d5lziV5tp78rJ3
+# fjtY7R+Uu0oPI4siY8H9as+4vBRdGjHeEQ54g8O+6XxmwVvnSEZ0rUNatZIpLK+A
+# hQHRZ030KtHXEEzXUEt/Ttn1si9p6sJncofEGyxYtz+MDqz73XuxG9x3AK1cHFcX
+# 6uFejw+PLlbHQ5tgtdcLXKzOQr94JPHUcjYSlmUu6418CozDE/MYYK8Oa8GjCxie
+# ZoqJ/Q/5j1R6Cx+I5Hjx/5ydEDjRnaqzjkVMxZNOjPFhNBtl0rOUPeaR9EtTOwX7
+# h1hLBXgoLCc/l26zNJH32lUkJ4GJA+065SFL2XIHMeV1Fap1Lbh9/4xGXVhB1PtN
+# RkZyD5kavVeyUB6Cel+sFkFRQSVKMTeDNKTmkYIt3h4dmFqqyyE2ldVMlAHHHjIH
+# Wjbdt3dAjS99iiJKY8MQbvsjcQOhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUxMjFaMD8GCSqGSIb3
+# DQEJBDEyBDBsyGMbAa8Yyr/ZD8Lqb0tKxEMl2EWIXEQkHqU93+OQkUzuy5tXJcU4
+# uU4GUy/cS5IwDQYJKoZIhvcNAQEBBQAEggIAAYIceOGLBOfszKm/1vsH6Jqjj7nj
+# yFnWk2tSuV+x1yfGC95nRAgQ4pjAu5riK75J8zHevX3WFT52rZC6WCk+kOGKwRPy
+# Nn+mN3frTE0oBTcnn1vKvA7ZsmqdV12t3uOY3P3w2pzM6H8hVXhcWMz/GDqt395h
+# LEhYXaHgdg3GoHyIVhHnsBPAbaszobB4m9Tv9XCopFAf318TdSxXvGnUwJFv8OAi
+# wIRWJZrEg5v+h6pi7FxYsRKzRi4W1td5e0kF3TDEf587UqN9KrE8Reu9zpdFFtyb
+# 6IdnWjC/L1rioo71Hzm12HBE+DotVERyOF3UaekLvliw5KYI9ipMYpBYVtzkGYgH
+# Zh12SM1J3ksm1KRT1v6+pCI/LrDFEHwTa2fbawotu4eltalBE7UD1mXuCE7dnQaC
+# VfqIXUaQNy4NfrVjGN1s8wcpYi+CWiiCzGLhy53n64dmzUjg15xQflAsJJqDs39h
+# UYynd7/+PSJEWxz28phgv29h4lqv9r4PMoL+48JcGygfcqOXMzjwoImC/jcpJ0Yw
+# amk2KCCDIvqqKPZLrTWlfhXZmez/RffaG+7AOvXT1lPKv1Zns54B/sDKENx+Ew9I
+# hRfU+PsYTycx/D4HbJGPOK/8k7Lz/vsQV56VcLn7KLCr2WzZGAfQaHEUENY4g82K
+# H9n2KvAnIW4dGsU=
 # SIG # End signature block

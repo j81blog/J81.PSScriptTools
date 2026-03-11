@@ -1,123 +1,220 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Get-SystemInfoInventory {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+.SYNOPSIS
+    Collects system information and adds it to SystemInventory.json
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+.DESCRIPTION
+    Gathers OS, hardware, network, security, and application information for golden master images.
+    Updates or creates the SystemInfo section in the existing SystemInventory.json file.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+.PARAMETER JsonPath
+    Path to the SystemInventory.json file. Defaults to C:\ProgramData\SystemInventory\SystemInventory.json
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+.EXAMPLE
+    .\Get-SystemInfoInventory.ps1
+    .\Get-SystemInfoInventory.ps1 -JsonPath "C:\Custom\Path\SystemInventory.json"
+#>
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
-
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
-
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
-    #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
+
+    $ErrorActionPreference = 'Stop'
+    $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
+
     try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
+        Write-Log "Starting system information collection..."
+
+        # Initialize SystemInfo object
+        $inventoryResults = @{
+            CollectedAt  = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+            OS           = @{}
+            Hardware     = @{}
+            Network      = @{}
+            Security     = @{}
+            Applications = @{}
         }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
+        # ===== OS Information =====
+        Write-Log "Collecting OS information..."
+        $os = Get-CimInstance -ClassName Win32_OperatingSystem
+        $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
 
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
+        $inventoryResults.OS = @{
+            Version      = $os.Version
+            BuildNumber  = $os.BuildNumber
+            Edition      = $os.Caption
+            Architecture = $os.OSArchitecture
+            Domain       = if ($computerSystem.PartOfDomain) { $computerSystem.Domain } else { "WORKGROUP: $($computerSystem.Workgroup)" }
+        }
+
+        # ===== Hardware Information (C: Drive only) =====
+        Write-Log "Collecting hardware information..."
+        $cDrive = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
+
+        $inventoryResults.Hardware = @{
+            CDrive = @{
+                TotalSizeGB = [math]::Round($cDrive.Size / 1GB, 2)
+                FreeSpaceGB = [math]::Round($cDrive.FreeSpace / 1GB, 2)
+                UsedSpaceGB = [math]::Round(($cDrive.Size - $cDrive.FreeSpace) / 1GB, 2)
+                PercentFree = [math]::Round(($cDrive.FreeSpace / $cDrive.Size) * 100, 2)
+            }
+        }
+
+        # Check for NVIDIA GPU
+        Write-Log "Checking for NVIDIA GPU..."
+        $nvidiaGPU = Get-CimInstance -ClassName Win32_VideoController | Where-Object { $_.Name -like "*NVIDIA*" }
+        $nvidiaSoftware = Get-Package -Name "NVIDIA Graphics*" -ErrorAction SilentlyContinue | Sort-Object Version | Select-Object -Last 1
+
+        if ($nvidiaGPU) {
+            $inventoryResults.Hardware.NvidiaGPU = @{
+                Name           = $nvidiaGPU.Name
+                DriverVersion  = $nvidiaGPU.DriverVersion
+                DriverDate     = $nvidiaGPU.DriverDate.ToString("yyyy-MM-dd")
+                VideoProcessor = $nvidiaGPU.VideoProcessor
+                AdapterRAM_GB  = if ($nvidiaGPU.AdapterRAM) { [math]::Round($nvidiaGPU.AdapterRAM / 1GB, 2) } else { "N/A" }
+            }
+            Write-Log "NVIDIA GPU detected: $($nvidiaGPU.Name)"
+            if (-not ([string]::IsNullOrEmpty($nvidiaSoftware.Version))) {
+                Write-Log "NVIDIA Software Version detected: $($nvidiaSoftware.Version)"
+                $nvResults = Get-NvidiaVGpuReleases -Detailed
+                $releaseInfo = $nvResults | Where-Object { $_.WindowsVGpuManager -like $nvidiaSoftware.Version }
+                if ($releaseInfo) {
+                    $inventoryResults.Hardware.NvidiaGPU['SoftwareReleaseBranch'] = $(if ([string]::IsNullOrEmpty($releaseInfo.SoftwareReleaseBranch)) { "N/A" } else { $releaseInfo.SoftwareReleaseBranch })
+                    $inventoryResults.Hardware.NvidiaGPU['DriverBranch'] = $(if ([string]::IsNullOrEmpty($releaseInfo.DriverBranch)) { "N/A" } else { $releaseInfo.DriverBranch })
+                    $inventoryResults.Hardware.NvidiaGPU['BranchType'] = $(if ([string]::IsNullOrEmpty($releaseInfo.BranchType)) { "N/A" } else { $releaseInfo.BranchType })
+                    $inventoryResults.Hardware.NvidiaGPU['ReleaseDate'] = $(if ([string]::IsNullOrEmpty($releaseInfo.ReleaseDate)) { "N/A" } else { $releaseInfo.ReleaseDate })
+                    $inventoryResults.Hardware.NvidiaGPU['EOLDate'] = $(if ([string]::IsNullOrEmpty($releaseInfo.EOLDate)) { "N/A" } else { $releaseInfo.EOLDate })
+                    $inventoryResults.Hardware.NvidiaGPU['SoftwareVersion'] = $(if ([string]::IsNullOrEmpty($nvidiaGPU.DriverVersion)) { "N/A" } else { $nvidiaSoftware.Name })
+                    Write-Log "NVIDIA Software release information added"
+                } else {
+                    Write-Log "No matching NVIDIA vGPU release information found for version $($nvidiaSoftware.Version)" -Level "WARNING"
                 }
             } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
+                Write-Log "No NVIDIA Software package detected"
             }
         } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
+            $inventoryResults.Hardware.NvidiaGPU = $null
+            Write-Log "No NVIDIA GPU detected"
         }
+
+        # ===== Network Information =====
+        Write-Log "Collecting network information..."
+        $networkAdapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+        $inventoryResults.Network = @{
+            Adapters = @()
+        }
+
+        foreach ($adapter in $networkAdapters) {
+            $ipConfig = Get-NetIPAddress -InterfaceIndex $adapter.InterfaceIndex -ErrorAction SilentlyContinue |
+                Where-Object { $_.AddressFamily -eq 'IPv4' } |
+                Select-Object -First 1
+
+            $adapterInfo = @{
+                Name        = $adapter.Name
+                Description = $adapter.InterfaceDescription
+                MACAddress  = $adapter.MacAddress
+                Status      = $adapter.Status
+                LinkSpeed   = $adapter.LinkSpeed
+                IPAddress   = if ($ipConfig) { $ipConfig.IPAddress } else { "N/A" }
+            }
+
+            $inventoryResults.Network.Adapters += $adapterInfo
+        }
+        Write-Log "Found $($networkAdapters.Count) active network adapter(s)"
+
+        # ===== Security Information =====
+        Write-Log "Collecting security information..."
+
+        # Windows Defender Status
+        try {
+            $defenderStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
+            $inventoryResults.Security.WindowsDefender = @{
+                AntivirusEnabled              = $defenderStatus.AntivirusEnabled
+                RealTimeProtectionEnabled     = $defenderStatus.RealTimeProtectionEnabled
+                AntivirusSignatureLastUpdated = $defenderStatus.AntivirusSignatureLastUpdated.ToString("yyyy-MM-dd HH:mm:ss")
+                AntivirusSignatureVersion     = $defenderStatus.AntivirusSignatureVersion
+            }
+        } catch {
+            $inventoryResults.Security.WindowsDefender = @{ Status = "Unable to retrieve" }
+            Write-Log "Unable to retrieve Windows Defender status: $_" -Level "WARNING"
+        }
+
+        # Firewall Status
+        try {
+            $DomainProfile = "Disabled"
+            $PrivateProfile = "Disabled"
+            $PublicProfile = "Disabled"
+            $firewallProfiles = Get-NetFirewallProfile
+            if (($firewallProfiles | Where-Object { $_.Name -eq 'Domain' }).Enabled) {
+                $DomainProfile = "Enabled"
+            }
+            if (($firewallProfiles | Where-Object { $_.Name -eq 'Private' }).Enabled) {
+                $PrivateProfile = "Enabled"
+            }
+            if (($firewallProfiles | Where-Object { $_.Name -eq 'Public' }).Enabled) {
+                $PublicProfile = "Enabled"
+            }
+            $inventoryResults.Security.Firewall = @{
+                DomainProfile  = $DomainProfile
+                PrivateProfile = $PrivateProfile
+                PublicProfile  = $PublicProfile
+            }
+        } catch {
+            $inventoryResults.Security.Firewall = @{ Status = "Unable to retrieve" }
+            Write-Log "Unable to retrieve Firewall status: $_" -Level "WARNING"
+            $DomainProfile = "N/A"
+            $PrivateProfile = "N/A"
+            $PublicProfile = "N/A"
+        }
+
+        # TPM Version
+        try {
+            $tpm = Get-Tpm -ErrorAction SilentlyContinue
+            if ($tpm) {
+                $tpmInfo = Get-CimInstance -Namespace "Root\CIMv2\Security\MicrosoftTpm" -ClassName Win32_Tpm -ErrorAction SilentlyContinue
+                $inventoryResults.Security.TPM = @{
+                    Present   = $tpm.TpmPresent
+                    Enabled   = $tpm.TpmEnabled
+                    Activated = $tpm.TpmActivated
+                    Version   = if ($tpmInfo) { "$($tpmInfo.SpecVersion)" } else { "Unknown" }
+                }
+            } else {
+                $inventoryResults.Security.TPM = @{ Present = $false }
+            }
+        } catch {
+            $inventoryResults.Security.TPM = @{ Status = "Unable to retrieve" }
+            Write-Log "Unable to retrieve TPM status: $_" -Level "WARNING"
+        }
+
+        # ===== Save Inventory =====
+        Write-Log "Saving SystemInventory..."
+
+        $inventoryData = @{}
+        $Item = "SystemInfo"
+        Write-Log "Saving $Item..."
+        $inventoryData[$Item] = $inventoryResults
+        $inventoryData["$($Item)ReportOrder"] = 1
+        $inventoryData["$($Item)LastChanged"] = $inventoryResults.CollectedAt
+        Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
+
+        Write-Log "System information collection completed successfully"
     } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
-    }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
-        }
+        Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
+        Write-Log "Important Error details:"
+        Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+    } finally {
+        $Script:LogFile = $null
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBHb6OBJ3rUqh8+
+# xBdvA231mVXqjFhwtv3EOgvZRXoH/aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +390,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDRC7CTyWyWNyP70V46c1hzAdsK5DAgZSorsuDqkkmJ
+# LjANBgkqhkiG9w0BAQEFAASCAYCJLWcmX88UR9LyfGfJCWvre7TDnBjpDmv2sQj8
+# g37J+YUQUnx8h3Rr4e7jllOJUkHIfbOZFa4bwZkkiyMLm05aW4lZHyF5RtWYKIul
+# wwdGMPJQLH6K6HAjYMWg0zGd04NvftvDPDCW3hbuQFuwTT2pEtc6i6rIB6PkrcbV
+# cjN5guFpwl3oz3w3YW5WumM/A3uVXXmLP6s9YRPg7jExR0WwAlPlMDMZWTXtRdRo
+# pbdknM3BvYjFGonIta9uj7Bs6SUY/R4IWp1nnXWOHlv0NwME8HKzoG03PqYhx6LD
+# Ry2EmLko9nKXCuPS55Zitb4oy42MAgVFGOU0ilAlClG7ShSDh/aa8YPp16TzVAy/
+# qFGpnFFVdvywT7IfxQqmS9iWATC4MFDUR2ypDTI1kppCNZjn+vNqkeivwiroAy7m
+# 8k7TPxOI46WFT21hm6xMxlZy3cE8XmHe/heyn+t4QfMPQjPT1NDSvp5N6KMtMVbY
+# VyAuQ8z9YhRYLtq1/knr8HZ7ddehggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwNDhaMD8GCSqGSIb3
+# DQEJBDEyBDCVZaTkodTHqZjL1FDioQSAj/ssRHb0uAWB4J6e9WKQb/SZ/2hZJO/X
+# k6L8YWXfqLMwDQYJKoZIhvcNAQEBBQAEggIAhr1i6IpmWj0m1QXgjyRGrpzXQgql
+# shtla/HfylB/Tfb3hcJTuRvZf+ThyOc0Oi8o4uyEpsQD2CSsOkJyFY2Me+54a7KE
+# QNkmEtTk3G9wIZDA0W2M4I5VK25XppsmsUqSaBLdx3mcElLnuMICNAqZSHExWMRc
+# Ramz0X0LsknSJYSkmj54QBtH3r0z/CsF9oE4Lw88ABs1aoYqx/MitsD6mRwiUgGS
+# hFs86u4DvO9sxFWbG48b+p3U7MKxu1apfSNi+tQj+2pjFPY1P1NUZmH49bPYEml8
+# gnQP5VYkZgR/TNwLdpJ+mJ/hjDVGDOoWVlLrKPfzdm3/E0YElpyQNFiItiPv6Zud
+# BM2Uv94HIqi1ryeQVZEKBXt+6q+qHcediD5e2t4H5eu0UR+bnyavY8ChCfm7vfzn
+# H0WG0jfi5KX4ASD+1ru60zETNHayEC+JjoV+xXbH9iL0oQB4LusQMOOsv6BHsJ+G
+# q+WOrakBnw7tmml4nJhc7CXkOUTR7Dvw+gcDl4Ignh5hCtxSixArc0GZFDSEk1oQ
+# 9zaVYAUONWCzOgY8VkDq85iIMG7OBuzFjJ7wNIbRIGaPmbv41qItuh5jwNBch+3m
+# vvXB4Q5dH9O6x3AjFq32N9OZ18paWJGHnDo2c0XpjSrFvNnrL55JhxytrdDHwMNd
+# aV9O3OBPzB9FqTc=
 # SIG # End signature block

@@ -1,123 +1,107 @@
-﻿function Get-GitHubCommitDescriptionByName {
+﻿function Get-SoftwareInventory {
     <#
-        .SYNOPSIS
-            Retrieves the full commit message/description for a given commit.
+    .SYNOPSIS
+    Collects installed software information for system inventory reporting.
 
-        .DESCRIPTION
-            This function fetches the commit details from the GitHub API
-            for a specified owner, repository, and commit (SHA, branch, or tag name).
-            It then extracts and returns the full commit message body, which often
-            serves as release notes.
+    .DESCRIPTION
+    Retrieves detailed information about all installed software packages on the local system
+    and integrates the data into the system inventory reporting framework. The function
+    collects software details including name, version, manufacturer, and installation date.
 
-        .PARAMETER PersonalAccessToken
-            The GitHub Personal Access Token (PAT) used for authentication.
-            It needs to have 'repo' scope (for private repos) or 'public_repo' for public.
+    .OUTPUTS
+    [PSCustomObject]
+    Returns software inventory data integrated into the system inventory framework
 
-        .PARAMETER Owner
-            The owner of the GitHub repository (user or organization name).
+    .PARAMETER InventoryFilePath
+    Full path to the system inventory JSON file where the software data will be stored.
 
-        .PARAMETER Repository
-            The name of the GitHub repository.
+    .EXAMPLE
+    PS C:\> Get-SoftwareInventory
+    Collects all installed software and saves to the default inventory location
 
-        .PARAMETER CommitName
-            The name of the commit to retrieve the description for.
-            This can be a commit SHA, a branch name, or a tag name.
+    .EXAMPLE
+    PS C:\> Get-SoftwareInventory -InventoryFilePath "C:\Custom\Path\Inventory.json"
+    Saves software inventory to a custom location
 
-        .NOTES
-            Version       : 2025.1110.2017
-            Author        : John Billekens Consultancy
-            LastUpdated   : 2025-08-17
-            Compatibility : PowerShell 5.1+
+    .NOTES
+    Function  : Get-SoftwareInventory
+    Author    : John Billekens
+    CoAuthor  : GitHub Copilot
+    Copyright : Copyright (c) John Billekens Consultancy
+    Version   : 2025.1110.1415
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Github')]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Switch]$Github,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubRepo,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [String]$GithubOwner,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [Alias('PAT')]
-        [string]$PersonalAccessToken,
-
-        [Parameter(Mandatory = $true, ParameterSetName = 'Github')]
-        [string]$CommitName,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$RemoveSubject,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'Github')]
-        [switch]$AsArray
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
     )
-    Write-Verbose "Retrieving commit description for '$($CommitName)' in repository '$($GithubOwner)/$($GithubRepo)'."
-    $OutputMessageLines = @()
-    try {
-        $headers = @{
-            "Accept"               = "application/vnd.github+json"
-            "Authorization"        = "Bearer $($PersonalAccessToken)"
-            "X-GitHub-Api-Version" = "2022-11-28"
-        }
 
-        $commitApiUrl = "https://api.github.com/repos/$($GithubOwner)/$($GithubRepo)/commits/$($CommitName)"
-        Write-Verbose "Fetching commit details from GitHub API: $($commitApiUrl)"
-        $commitResponse = Invoke-RestMethod -Uri $commitApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $FullCommitMessage = "$($commitResponse.commit.message)".Trim()
-        Write-Verbose "Full commit message for '$($CommitName)': $($FullCommitMessage)"
-        if (-not [string]::IsNullOrEmpty($FullCommitMessage)) {
-            Write-Verbose "Extracting commit description for '$($CommitName)'."
-            # The body of the commit message is everything after the first line (subject)
-            $MessageLines = $FullCommitMessage.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
-            $count = 0
-            $pattern = '^\s*[-=*]+\s*'
-            if ($MessageLines.Count -gt 1) {
-                foreach ($Line in $MessageLines) {
-                    if ($count -eq 0 -and $RemoveSubject) {
-                        Write-Verbose "First line of commit message is the subject. Skipping it. (RemoveSubject is set to $($RemoveSubject.ToBool()))"
-                        Write-Verbose "Commit message subject: $Line"
-                        $count++
-                        continue
-                    }
-                    # Clean up the line by removing leading/trailing whitespace/dashes
-                    $OutputMessageLines += $Line -replace $pattern, ''
-                }
-            } else {
-                Write-Verbose "Commit message has only one line. Returning as description."
-                # If there's only one line, return it as the description
-                $OutputMessageLines += $FullCommitMessage
-            }
-        } else {
-            Write-Warning "No commit message found for '$($CommitName)'."
-            return $null
-        }
-    } catch {
-        Write-Error "An error occurred while fetching commit details from GitHub API: $($_.Exception.Message)"
-        return $null
+    begin {
+        Write-Verbose "Starting $($MyInvocation.MyCommand)"
+        $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
     }
-    if ($OutputMessageLines.Count -eq 0) {
-        Write-Warning "No commit description found for '$($CommitName)'."
-        return $null
-    } else {
-        Write-Verbose "Returning commit description for '$($CommitName)'."
-        if ($AsArray) {
-            Write-Verbose "Returning commit description as an array."
-            return $OutputMessageLines
-        } else {
-            Write-Verbose "Returning commit description as a single string."
-            return $OutputMessageLines -join [Environment]::NewLine
+
+    process {
+        try {
+            Write-Log "Importing PackageManagement module"
+            Import-Module PackageManagement -Force -ErrorAction Stop
+            Write-Log "Module imported successfully"
+
+            # Retrieve Installed Software
+            Write-Log "Retrieving installed software packages"
+            $inventoryResults = @(Get-InstalledSoftware | ConvertTo-Hashtable)
+
+            # Save Inventory
+            Write-Log "Saving SystemInventory..."
+
+            $inventoryData = @{}
+            # Add or update InstalledSoftware section
+            $item = "InstalledSoftware"
+            Write-Log "Saving $item..."
+            $inventoryData[$item] = $inventoryResults
+            $inventoryData["$($item)Report"] = @{
+                Order        = 3
+                Title        = "Installed Software"
+                Fields = [Ordered]@{
+                    ProductName    = "Product Name"
+                    ProductVersion = "Version"
+                    Manufacturer   = "Manufacturer"
+                    InstallDate    = "Install Date"
+                }
+                SortBy       = @("ProductName")
+                SortOrder    = @("Ascending")
+                Highlight    = @{}
+                Searchable   = $true
+            }
+            $inventoryData["$($item)LastChanged"] = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+
+            Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $item
+
+            Write-Log "Software inventory collection completed successfully"
+        } catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Log "Inventory file path not found: $($_.Exception.Message)" -Level "ERROR"
+        } catch [System.Management.Automation.CommandNotFoundException] {
+            Write-Log "Required module not available: $($_.Exception.Message)" -Level "ERROR"
+        } catch {
+            Write-Log "Important Error details:"
+            Write-Log "$($_ | Get-ExceptionDetails -AsText)"
+            Write-Log "An error occurred during software inventory collection: $($_.Exception.Message)" -Level "ERROR"
         }
+    }
+
+    end {
+        Write-Verbose "Completed $($MyInvocation.MyCommand)"
+        $Script:LogFile = $null
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCS4yrB3I4s1M5l
-# TpEI9lJD9go9VAtW7Ihi5DME7fHfD6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCfmVWZjC8mTYyI
+# HexIOcemqg+a4+LZyd8vG++Cu2wC7KCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -293,31 +277,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAD8SJMQSU+8hYGNMV6LGNf2/nFKAWYDj4H/W/tMoFs
-# pTANBgkqhkiG9w0BAQEFAASCAYAsg6bhs06Abdzm78jmgj+1s9RaetjNCKf4ujyR
-# y6yk43EPthGE3QPjU+OXpt45xuxmOqOdG3KVj+ayQafyJjmVg+GVDM97hP4ySCLR
-# JiSNLhVek0hv0Yv7WVT+yiAfkiQKfCcVMqxCa9vEBZZxKdlPqLWJjcifJZWFnLp7
-# D7v3hdjBMQe2YPjqRdbmOZTVPH2dTwk7TYYHrZ7qcuJ40lD8AJ+TlTjFmD1SowYF
-# v+MXttc0ymwnUvKIQDmTi/XxWDye7E00cgHyyqv9qXhLF/ts0IuPoD/Y4Cwu1Z9l
-# 9LSQMGX03uBwBbmg6+UgFNKCLYYhoVi5K1ozDn036ZwOGWZaWZIMlReiikkhqby3
-# O+sVdJh/gKjE8/62N9n+voufEy9nbDoTOl6OOAKK1ru5C0cKociI33nIckzCnOwr
-# QIgno1isMHAb0IzXzz4HnRSNFPtlMukT6hKjQkrg33YBl+MG22xnWDtkPh0IIT6+
-# 76Q/L0ZLGyRbwDJLBG8ovEnjRSShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCBLr5aCZCP6rQ6GT18X3yZ1PmdEXvgpCeT3rPPICIXN
+# xjANBgkqhkiG9w0BAQEFAASCAYAL8PQgeA+9Xs/uMV9n8BpafMFiIwdvGpJ9g5K0
+# euAxPB0BmiMA0PCh1qBcrU81LwX02dldEIF3wrCPjI4gniQTxsEosk8/d+EMJso7
+# XHHaYl71anrXbW0O8RmjyIFu1Ql2K5YbpwmQHnMEfHSkZyjVxC5XgB/PpSlsN3Sc
+# xbE/LOvyFAictclcxpEXN6szxu9b7umiksoVSeWz1BB7OUlDLwOhW9ed8d0xh74e
+# PDx0IfOc9hDlXxhO6FqgGw0/fhq3+SZXDnOc7CSWQ9j+raaTZytNouEZC4hvTtl5
+# yRNrpaQ0Zzd+eRYrM1aXli7s1sV9XjevGpW3eHOqRpwfq9m3UjUbmTOXOhrVhz7x
+# +hths6tMbHN3tg/XABrJnQIcPMINJXRK8dh13eAlI0w2sQnDvG7yAg18IX5H2uor
+# n2zgTuqumxewBOse1Zg1sf0kACe78GHvF6bZKSfGHHumVZEsO9gqRcbG5M7Hiu4X
+# id0GXRboJgB46cQiiFwnDyYfSQyhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzBaMD8GCSqGSIb3
-# DQEJBDEyBDCXZnE7zAWBEeDHnnR9tR0Gs2yTyNL8+FaXyQTcVXx2uUPm8Aq6kyez
-# U4vG66RK4iIwDQYJKoZIhvcNAQEBBQAEggIAwdEShmw6TungfejSujyeVKHsXVyz
-# eKX4ZEvzwmgip09MQN6qFLKPWee/uJhD1/w9H7hFn/pGuDJYBtS0XSk1L3Q7P+4B
-# xKgLiOcyR6B1iwIBJJb8ERQMNzu6ItXEofN8fYWzNe5Z8qSK6UbvQ7OLwb1smmEG
-# ASdBUKEIG/3V1QjSRt08fv5AhD3Tmq0a5EdnQVA5mbokkzWQzkmfBZFCKL4vqVOu
-# Z4NqrMydJr5k0/+bClvkSmiiMdq320rawVW9U0d67Dt11QwJD5ypLIEcemOG5LP5
-# x0dE0fM3uEOeBYVZM3/EGbpHkq7fC0FQqJKpRubj96FJD5IhogS3OQgTZqd4EJI+
-# wHg/yNYDaitN/Dc0ejnbHTUqjC5HUt2HNyGLpZHoJcyJodakgoLwFAAnLHYBgmJk
-# JB6+JOIUInM9JBzu3c3M1/sPfwpSzFdb/nqqujoF2cFFeoGUIuaKIHb6wOOpxQUd
-# i1ggUq5OcMpc0SZwDKrG6u2Uwu+1nEqyt0yo9h3lHqBYjF0XCI85aWlRTNFYe7G4
-# MyJeiLPkreJyjUZOxjE4QEPTwwbJyFQpV+3KqjcTWHEPb81TkEvg7dEENvCDgQ1b
-# 3EkGihLeBHL/LmESY16D6j+VbUhwhXEtE3Qw7mgUaPnMBtkNl0ZMqr/rJoguuiRs
-# nHiE5IK2JZMHMRU=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwNDVaMD8GCSqGSIb3
+# DQEJBDEyBDBylAPcwpOaqMFL90cLxA70Q6Bn7asFy+fLO+0yCX2xw8yeQdp9Jd1Q
+# P1XpyECytUYwDQYJKoZIhvcNAQEBBQAEggIAzccY5QSG//4cpMkA9O8QN2Y/q16i
+# fZlap64V2UXLnV7SSi7OHwRpjm6alvcs0E82TuL4wzPtp7JZHKrzm0FYKhrEr9pB
+# y40d+z11q2ka4aZPDeoDCG+zH+0bkpkbF3vEezQHO99dVjsp68Z/NUtZ48MrQHty
+# oX+QIIVkujYa8JyHPrzRhhm2X3oKolK0L/tw7Uj5tvWodYwoAC/Jy3rveUN5hmPv
+# a3R41ATpbggbWCRRWcjNUmDUROOZ+3qH+rlm8208CoNnzYpQ6uiacerkXJLdXzw3
+# +aPxii0fLQjMzStG/Jycen6IpmMeE9VBmReAABK81IbqYza4c8UD9ZNf15e89vK9
+# tWaqjMNSkqiS9pE3OcXSwKlPOLlJ3pfEW/M4ZPuynmOQqLz+LXBDGE6/rX/Eu2va
+# xeHTuXe3IZBf1AxS+wL0gYpcCcdxEHzFAgJ2rWnLQvE3oNWLWIwzM8nBriWbp1YN
+# s3DdMultJQjevRd0D4TA0YT0Iy27OYD2PKhHszjeeF1Xr0GsCaGv6f+9bj6+K7gE
+# On5w05D0mW3wjfNdSqJEYZesiqnSSRSXufVk4REmoLV10ChmOIsYhvm0B1HowW1d
+# QO1G3HLadTotk+YApMOqWJNwpry8XydswsEDWJFTKzQGRbYrCZzMxFYEItEVvGsD
+# egGuSJLBkPkpzy8=
 # SIG # End signature block
