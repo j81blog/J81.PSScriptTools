@@ -1,220 +1,79 @@
-﻿function Get-SystemInfoInventory {
+﻿function Get-MsiProperties {
     <#
-.SYNOPSIS
-    Collects system information and adds it to SystemInventory.json
+    .SYNOPSIS
+        Reads all properties from an MSI installer database.
 
-.DESCRIPTION
-    Gathers OS, hardware, network, security, and application information for golden master images.
-    Updates or creates the SystemInfo section in the existing SystemInventory.json file.
+    .DESCRIPTION
+        Opens an MSI file using the Windows Installer COM API and retrieves all
+        key/value pairs from the Property table. Returns a PSCustomObject with
+        one property per MSI property, suitable for pipeline use.
 
-.PARAMETER JsonPath
-    Path to the SystemInventory.json file. Defaults to C:\ProgramData\SystemInventory\SystemInventory.json
+    .PARAMETER Path
+        Path to an MSI file. Accepts pipeline input by value or by property name.
 
-.EXAMPLE
-    .\Get-SystemInfoInventory.ps1
-    .\Get-SystemInfoInventory.ps1 -JsonPath "C:\Custom\Path\SystemInventory.json"
-#>
+    .INPUTS
+        System.String, System.IO.FileInfo
 
+    .OUTPUTS
+        PSCustomObject with properties corresponding to the MSI Property table.
+
+    .EXAMPLE
+        Get-MsiProperties -Path 'C:\installers\app.msi'
+
+        Returns all properties from the specified MSI file.
+
+    .EXAMPLE
+        Get-Item 'C:\installers\*.msi' | Get-MsiProperties
+
+        Reads properties from every MSI file in the folder via the pipeline.
+
+    .EXAMPLE
+        (Get-MsiProperties -Path 'C:\installers\app.msi').ProductVersion
+
+        Returns only the ProductVersion property value.
+    #>
     [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $false)]
-        [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json"
+    param (
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
+        [ValidateScript({
+            $p = [string]$_
+            (Test-Path $p -PathType Leaf) -and ($p.EndsWith('.msi', [StringComparison]::OrdinalIgnoreCase))
+        })]
+        [string]$Path
     )
-
-    $ErrorActionPreference = 'Stop'
-    $Script:LogFile = Join-Path -Path (Split-Path $InventoryFilePath -Parent) -ChildPath "$(([System.IO.FileInfo]$InventoryFilePath).BaseName).log"
-
-    try {
-        Write-Log "Starting system information collection..."
-
-        # Initialize SystemInfo object
-        $inventoryResults = @{
-            CollectedAt  = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
-            OS           = @{}
-            Hardware     = @{}
-            Network      = @{}
-            Security     = @{}
-            Applications = @{}
-        }
-
-        # ===== OS Information =====
-        Write-Log "Collecting OS information..."
-        $os = Get-CimInstance -ClassName Win32_OperatingSystem
-        $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
-
-        $inventoryResults.OS = @{
-            Version      = $os.Version
-            BuildNumber  = $os.BuildNumber
-            Edition      = $os.Caption
-            Architecture = $os.OSArchitecture
-            Domain       = if ($computerSystem.PartOfDomain) { $computerSystem.Domain } else { "WORKGROUP: $($computerSystem.Workgroup)" }
-        }
-
-        # ===== Hardware Information (C: Drive only) =====
-        Write-Log "Collecting hardware information..."
-        $cDrive = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
-
-        $inventoryResults.Hardware = @{
-            CDrive = @{
-                TotalSizeGB = [math]::Round($cDrive.Size / 1GB, 2)
-                FreeSpaceGB = [math]::Round($cDrive.FreeSpace / 1GB, 2)
-                UsedSpaceGB = [math]::Round(($cDrive.Size - $cDrive.FreeSpace) / 1GB, 2)
-                PercentFree = [math]::Round(($cDrive.FreeSpace / $cDrive.Size) * 100, 2)
-            }
-        }
-
-        # Check for NVIDIA GPU
-        Write-Log "Checking for NVIDIA GPU..."
-        $nvidiaGPU = Get-CimInstance -ClassName Win32_VideoController | Where-Object { $_.Name -like "*NVIDIA*" }
-        $nvidiaSoftware = Get-Package -Name "NVIDIA Graphics*" -ErrorAction SilentlyContinue | Sort-Object Version | Select-Object -Last 1
-
-        if ($nvidiaGPU) {
-            $inventoryResults.Hardware.NvidiaGPU = @{
-                Name           = $nvidiaGPU.Name
-                DriverVersion  = $nvidiaGPU.DriverVersion
-                DriverDate     = $nvidiaGPU.DriverDate.ToString("yyyy-MM-dd")
-                VideoProcessor = $nvidiaGPU.VideoProcessor
-                AdapterRAM_GB  = if ($nvidiaGPU.AdapterRAM) { [math]::Round($nvidiaGPU.AdapterRAM / 1GB, 2) } else { "N/A" }
-            }
-            Write-Log "NVIDIA GPU detected: $($nvidiaGPU.Name)"
-            if (-not ([string]::IsNullOrEmpty($nvidiaSoftware.Version))) {
-                Write-Log "NVIDIA Software Version detected: $($nvidiaSoftware.Version)"
-                $nvResults = Get-NvidiaVGpuReleases -Detailed
-                $releaseInfo = $nvResults | Where-Object { $_.WindowsVGpuManager -like $nvidiaSoftware.Version }
-                if ($releaseInfo) {
-                    $inventoryResults.Hardware.NvidiaGPU['SoftwareReleaseBranch'] = $(if ([string]::IsNullOrEmpty($releaseInfo.SoftwareReleaseBranch)) { "N/A" } else { $releaseInfo.SoftwareReleaseBranch })
-                    $inventoryResults.Hardware.NvidiaGPU['DriverBranch'] = $(if ([string]::IsNullOrEmpty($releaseInfo.DriverBranch)) { "N/A" } else { $releaseInfo.DriverBranch })
-                    $inventoryResults.Hardware.NvidiaGPU['BranchType'] = $(if ([string]::IsNullOrEmpty($releaseInfo.BranchType)) { "N/A" } else { $releaseInfo.BranchType })
-                    $inventoryResults.Hardware.NvidiaGPU['ReleaseDate'] = $(if ([string]::IsNullOrEmpty($releaseInfo.ReleaseDate)) { "N/A" } else { $releaseInfo.ReleaseDate })
-                    $inventoryResults.Hardware.NvidiaGPU['EOLDate'] = $(if ([string]::IsNullOrEmpty($releaseInfo.EOLDate)) { "N/A" } else { $releaseInfo.EOLDate })
-                    $inventoryResults.Hardware.NvidiaGPU['SoftwareVersion'] = $(if ([string]::IsNullOrEmpty($nvidiaGPU.DriverVersion)) { "N/A" } else { $nvidiaSoftware.Name })
-                    Write-Log "NVIDIA Software release information added"
-                } else {
-                    Write-Log "No matching NVIDIA vGPU release information found for version $($nvidiaSoftware.Version)" -Level "WARNING"
+    process {
+        $Path = (Resolve-Path $Path).Path
+        $installer = New-Object -ComObject WindowsInstaller.Installer
+        try {
+            $db = $installer.OpenDatabase($Path, 0)
+            try {
+                $view = $db.OpenView("SELECT Property, Value FROM Property")
+                try {
+                    $view.Execute()
+                    $results = @{}
+                    $record = $view.Fetch()
+                    while ($record) {
+                        $results[$record.StringData(1)] = $record.StringData(2)
+                        $record = $view.Fetch()
+                    }
+                    [PSCustomObject]$results
+                } finally {
+                    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($view) | Out-Null
                 }
-            } else {
-                Write-Log "No NVIDIA Software package detected"
+            } finally {
+                [System.Runtime.InteropServices.Marshal]::ReleaseComObject($db) | Out-Null
             }
-        } else {
-            $inventoryResults.Hardware.NvidiaGPU = $null
-            Write-Log "No NVIDIA GPU detected"
+        } finally {
+            [System.Runtime.InteropServices.Marshal]::ReleaseComObject($installer) | Out-Null
         }
-
-        # ===== Network Information =====
-        Write-Log "Collecting network information..."
-        $networkAdapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
-        $inventoryResults.Network = @{
-            Adapters = @()
-        }
-
-        foreach ($adapter in $networkAdapters) {
-            $ipConfig = Get-NetIPAddress -InterfaceIndex $adapter.InterfaceIndex -ErrorAction SilentlyContinue |
-                Where-Object { $_.AddressFamily -eq 'IPv4' } |
-                Select-Object -First 1
-
-            $adapterInfo = @{
-                Name        = $adapter.Name
-                Description = $adapter.InterfaceDescription
-                MACAddress  = $adapter.MacAddress
-                Status      = $adapter.Status
-                LinkSpeed   = $adapter.LinkSpeed
-                IPAddress   = if ($ipConfig) { $ipConfig.IPAddress } else { "N/A" }
-            }
-
-            $inventoryResults.Network.Adapters += $adapterInfo
-        }
-        Write-Log "Found $($networkAdapters.Count) active network adapter(s)"
-
-        # ===== Security Information =====
-        Write-Log "Collecting security information..."
-
-        # Windows Defender Status
-        try {
-            $defenderStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
-            $inventoryResults.Security.WindowsDefender = @{
-                AntivirusEnabled              = $defenderStatus.AntivirusEnabled
-                RealTimeProtectionEnabled     = $defenderStatus.RealTimeProtectionEnabled
-                AntivirusSignatureLastUpdated = $defenderStatus.AntivirusSignatureLastUpdated.ToString("yyyy-MM-dd HH:mm:ss")
-                AntivirusSignatureVersion     = $defenderStatus.AntivirusSignatureVersion
-            }
-        } catch {
-            $inventoryResults.Security.WindowsDefender = @{ Status = "Unable to retrieve" }
-            Write-Log "Unable to retrieve Windows Defender status: $_" -Level "WARNING"
-        }
-
-        # Firewall Status
-        try {
-            $DomainProfile = "Disabled"
-            $PrivateProfile = "Disabled"
-            $PublicProfile = "Disabled"
-            $firewallProfiles = Get-NetFirewallProfile
-            if (($firewallProfiles | Where-Object { $_.Name -eq 'Domain' }).Enabled) {
-                $DomainProfile = "Enabled"
-            }
-            if (($firewallProfiles | Where-Object { $_.Name -eq 'Private' }).Enabled) {
-                $PrivateProfile = "Enabled"
-            }
-            if (($firewallProfiles | Where-Object { $_.Name -eq 'Public' }).Enabled) {
-                $PublicProfile = "Enabled"
-            }
-            $inventoryResults.Security.Firewall = @{
-                DomainProfile  = $DomainProfile
-                PrivateProfile = $PrivateProfile
-                PublicProfile  = $PublicProfile
-            }
-        } catch {
-            $inventoryResults.Security.Firewall = @{ Status = "Unable to retrieve" }
-            Write-Log "Unable to retrieve Firewall status: $_" -Level "WARNING"
-            $DomainProfile = "N/A"
-            $PrivateProfile = "N/A"
-            $PublicProfile = "N/A"
-        }
-
-        # TPM Version
-        try {
-            $tpm = Get-Tpm -ErrorAction SilentlyContinue
-            if ($tpm) {
-                $tpmInfo = Get-CimInstance -Namespace "Root\CIMv2\Security\MicrosoftTpm" -ClassName Win32_Tpm -ErrorAction SilentlyContinue
-                $inventoryResults.Security.TPM = @{
-                    Present   = $tpm.TpmPresent
-                    Enabled   = $tpm.TpmEnabled
-                    Activated = $tpm.TpmActivated
-                    Version   = if ($tpmInfo) { "$($tpmInfo.SpecVersion)" } else { "Unknown" }
-                }
-            } else {
-                $inventoryResults.Security.TPM = @{ Present = $false }
-            }
-        } catch {
-            $inventoryResults.Security.TPM = @{ Status = "Unable to retrieve" }
-            Write-Log "Unable to retrieve TPM status: $_" -Level "WARNING"
-        }
-
-        # ===== Save Inventory =====
-        Write-Log "Saving SystemInventory..."
-
-        $inventoryData = @{}
-        $Item = "SystemInfo"
-        Write-Log "Saving $Item..."
-        $inventoryData[$Item] = $inventoryResults
-        $inventoryData["$($Item)ReportOrder"] = 1
-        $inventoryData["$($Item)LastChanged"] = $inventoryResults.CollectedAt
-        Save-Inventory -InventoryFilePath $InventoryFilePath -Data $inventoryData -Item $Item
-
-        Write-Log "System information collection completed successfully"
-    } catch {
-        Write-Log "Error during collection: $($_.Exception.Message)" -Level "ERROR"
-        Write-Log "Important Error details:"
-        Write-Log "$($_ | Get-ExceptionDetails -AsText)"
-    } finally {
-        $Script:LogFile = $null
     }
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBHb6OBJ3rUqh8+
-# xBdvA231mVXqjFhwtv3EOgvZRXoH/aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCGmGL6mjedS8ao
+# FVNmrAu9/PNe7/hhsAuvs6r5sMxc86CCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -390,31 +249,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCDRC7CTyWyWNyP70V46c1hzAdsK5DAgZSorsuDqkkmJ
-# LjANBgkqhkiG9w0BAQEFAASCAYCJLWcmX88UR9LyfGfJCWvre7TDnBjpDmv2sQj8
-# g37J+YUQUnx8h3Rr4e7jllOJUkHIfbOZFa4bwZkkiyMLm05aW4lZHyF5RtWYKIul
-# wwdGMPJQLH6K6HAjYMWg0zGd04NvftvDPDCW3hbuQFuwTT2pEtc6i6rIB6PkrcbV
-# cjN5guFpwl3oz3w3YW5WumM/A3uVXXmLP6s9YRPg7jExR0WwAlPlMDMZWTXtRdRo
-# pbdknM3BvYjFGonIta9uj7Bs6SUY/R4IWp1nnXWOHlv0NwME8HKzoG03PqYhx6LD
-# Ry2EmLko9nKXCuPS55Zitb4oy42MAgVFGOU0ilAlClG7ShSDh/aa8YPp16TzVAy/
-# qFGpnFFVdvywT7IfxQqmS9iWATC4MFDUR2ypDTI1kppCNZjn+vNqkeivwiroAy7m
-# 8k7TPxOI46WFT21hm6xMxlZy3cE8XmHe/heyn+t4QfMPQjPT1NDSvp5N6KMtMVbY
-# VyAuQ8z9YhRYLtq1/knr8HZ7ddehggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCAHyvaATj5RNifupbr6KfkWFsev8ev0cJPl2H8RJzTf
+# ETANBgkqhkiG9w0BAQEFAASCAYDBmcFxvlVpSEu6Rl7peV/MdwcYQBbHokTmxdXV
+# SzLZ0s18zC2qOwY7TZF7Uzy2eK+MonewcFiCuDTAbFCLUprGhI3EFErKnodw80WF
+# gnUySZdVduA7+fkql0/2EfvtBmhflvRhimm76Jnz+BL9pn+9t1fS4bupgiOEmLPx
+# mNCEHXJGB0wytokyR9i9bIG5ycvJUYbnZUKb/3D3JOUbK06ThHKEs/eB9CqANuDR
+# ACcpKHLfTLhXDg1efZfSAGwlxy5uwet5NmhAnBM2BAanQ28hJ6O6aC9aDjdcAGHT
+# 2S7vB+QC+W0E7nYB7VodaOdlP2HQVWxGncxV4JSpN4ygwvynrZldEkYSxZb96Ccf
+# +H718j+fOuxnsIT/2B+0kKboY1ZVFK46KEEcBiYqwQaRhVXfLoNcCTv1ULrkqwdE
+# 4fqYKEwGYpD2KRhB63oOnUV+uhZ/s05jWOsn0OLsWDX+K/PVamTMI3+iKAGGiZOV
+# QgUDVisSNaZ8guTaE2rhx+Qn5Z2hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODQyMDRaMD8GCSqGSIb3
-# DQEJBDEyBDCVZaTkodTHqZjL1FDioQSAj/ssRHb0uAWB4J6e9WKQb/SZ/2hZJO/X
-# k6L8YWXfqLMwDQYJKoZIhvcNAQEBBQAEggIAgrmgYpMCPGimqvyyqBnTnHEzffHf
-# F+ThDPJQifjZYEoNuXgmci3tZ6GDnaCkrVzicQdgyt+I9DNp6g9wY/QG5oaPYWR1
-# +GLzFnSeQkYSX7mSgmIpbYdnfJkpgW3+EfSXH5orJwubF/FEkce5KZHFBJ2/YUYT
-# MQd904Vk7jPl2Y9ihErwW/XKnv7yG4hQPxQCsbnOuVrIWWGit/CrcYX7TjHDy9QK
-# qVJuisHDu8RCK1apczhD8Jlpks/LTQ3q7FB/B0FXKYkniVd3ecLIn8uFcA1YH8/m
-# QshMRxk1znURZU1iUI2MkvZdSIaq65PfikF43gVPadiqrKRtmqino3hh1Y+QxxGm
-# 5TmWzNWkyihZTv+dnvUgJSwrlgVhQl5B6RoFehQyy9gdoc7yJGl8lpV/cUNq/Vkd
-# nb/VcJpv8qUdeuqx20Y535BywEVg83nhwciHiSx7vv0icA88LEsRFTWXMUjHGfEC
-# 5WQAEelCz2T0MQjPVJxAFJynzi/VybDcvmAKXhpcG7IEdFjW/j66q5UHg7MCqzEI
-# L3z/92WvIQq8NAHVeLq3WgaWufShNGCLv/OT0ma9w5wicmzkpvdbsp3TvsbuM5dE
-# YlhOko6+L4bxV4PXgCWlIdaiQjtHqLNcgXbJdCWfsXziRzqE+3urIJS4VCwSFqEl
-# BxI4I5OJozVE/10=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODQyMDFaMD8GCSqGSIb3
+# DQEJBDEyBDArxjJTpwt+ZLnME+bRhLNi5o7eEVtd/Jkj9bcoa25fIdXthjgZHUBW
+# 9O9wlf/ql9IwDQYJKoZIhvcNAQEBBQAEggIAegvgrc9IeF41owCewusA+biYSVf7
+# chDe7L5Wz5EU8lQnPys8vt2mGOnNbRXjKHBifjm/J7+2LQST0YbTiB2C2YqmGz31
+# 5IPFeZ1f38RBdIyWC2aP2sgg9V84Um1j4lqZGKggfzVXYhVZJuoQEU/rAYAMhoBo
+# OKyHv0kQqir5aGecK+3vpEBsKEvr9V8aMD9voMJPSuS4aR3d5LGFoneCY3a5BvVp
+# Ksd3UExJLBt2pShz7Adk8FbGzIWbX2rbyLzvT1AxkfTvSv2F3v4w73PUr6q6Kjqj
+# rg+ACr7aKPfnZcsWnARwbfAQIoyrL9ek13YurLrRClaSN4FYlUjluefh3lZD0YPI
+# wXQuQH69KqVgGcsyK7j7mNjPY2YPTqk8L1brRgtbpTPxYE0+z+1zFABpT73073D4
+# kaCjxFoD5XEFznz+5IqhsObrWOlFvKPwB5WA1ec5nhS6LbrpVYZfjsfd8jGAacbb
+# bjU6hpXL/etH5yxRVWOcYlsa/XqQifC+vgtIsAREzgQVrUqbV1YSpcxq8Ek2/KfR
+# wzPjEUHkyX3SgiP0jwE7X25xXgSjP6fiA+O/Utxo3LtZkG8gdoddyNx3M7ZPzZW6
+# cheKOFU5U2VVrEqHlxjWHTMOtPG4xhy1ZjtoFpAWG2ofxxEhz+RMd5u6BBSlSrJ5
+# EihIKEYTOS/Tcq0=
 # SIG # End signature block
