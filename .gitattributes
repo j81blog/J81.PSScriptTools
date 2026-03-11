@@ -1,7 +1,0 @@
-# Auto detect text files and perform LF normalization
-* text=auto
-
-# PowerShell files: no line-ending conversion (signed as-is on Windows with CRLF)
-*.ps1  -text
-*.psm1 -text
-*.psd1 -text
