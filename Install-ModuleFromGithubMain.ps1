@@ -49,7 +49,7 @@ if ([String]::IsNullOrWhiteSpace($ScriptPath)) {
     $Url = 'https://{0}/{1}/{2}/archive/refs/heads/{3}.zip' -f $HostUrl, $Owner, $Repo, $RemoteBranch
     Write-Verbose "Url: $Url"
 
-    Write-Host "Downloading latest version of $($ModuleName) from $url" -ForegroundColor Cyan
+    Write-Host "Downloading latest version of $($ModuleName) from:`r`n => $url" -ForegroundColor Cyan
     $file = Join-Path -Path ([system.io.path]::GetTempPath()) -ChildPath "$($ModuleName).zip"
     $webclient = New-Object System.Net.WebClient
     try {
@@ -62,7 +62,7 @@ if ([String]::IsNullOrWhiteSpace($ScriptPath)) {
     Write-Host "File saved to $file" -ForegroundColor Green
 
     # extract the zip
-    Write-Host "Expanding $($ModuleName).zip to $($installpath)" -ForegroundColor Cyan
+    Write-Host "Expanding `"$($ModuleName).zip`" to `"$($installpath)`"" -ForegroundColor Cyan
     Expand-Archive $file -DestinationPath $installpath
 
     Write-Host "Removing any old copy" -ForegroundColor Cyan
@@ -80,6 +80,4 @@ if ([String]::IsNullOrWhiteSpace($ScriptPath)) {
     # force re-load the module (assuming you're editing locally and want to see changes)
     Import-Module -Name $($ModuleName) -Force
 }
-Write-Host 'Module has been installed' -ForegroundColor Green
-
-Get-Command -Module $($ModuleName)
+Write-Host 'Module has been installed and loaded`r`n' -ForegroundColor Green
