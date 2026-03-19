@@ -97,46 +97,56 @@
         [switch]$MarkdownOnly
     )
 
+    Write-Host "Starting system inventory collection and report generation..." -ForegroundColor White
     try {
-        Get-PrinterDriverInventory -InventoryFilePath $InventoryFilePath
-    } catch {
-        Write-Warning "Failed to get printer driver inventory. Error: $($_.Exception.Message)"
-    }
-    try {
-        Get-SoftwareInventory -InventoryFilePath $InventoryFilePath
-    } catch {
-        Write-Warning "Failed to get software inventory. Error: $($_.Exception.Message)"
-    }
-    try {
+        Write-Host "Collecting system information inventory..." -ForegroundColor Cyan
         Get-SystemInfoInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get system info inventory. Error: $($_.Exception.Message)"
     }
     try {
+        Write-Host "Collecting printer driver inventory..." -ForegroundColor Cyan
+        Get-PrinterDriverInventory -InventoryFilePath $InventoryFilePath
+    } catch {
+        Write-Warning "Failed to get printer driver inventory. Error: $($_.Exception.Message)"
+    }
+    try {
+        Write-Host "Collecting software inventory..." -ForegroundColor Cyan
+        Get-SoftwareInventory -InventoryFilePath $InventoryFilePath
+    } catch {
+        Write-Warning "Failed to get software inventory. Error: $($_.Exception.Message)"
+    }
+    try {
+        Write-Host "Collecting Windows auto-run inventory..." -ForegroundColor Cyan
         Get-WindowsAutoRunInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get Windows auto-run inventory. Error: $($_.Exception.Message)"
     }
     try {
+        Write-Host "Collecting Windows capability inventory..." -ForegroundColor Cyan
         Get-WindowsCapabilityInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get Windows capability inventory. Error: $($_.Exception.Message)"
     }
     try {
+        Write-Host "Collecting Windows optional feature inventory..." -ForegroundColor Cyan
         Get-WindowsOptionalFeatureInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get Windows optional feature inventory. Error: $($_.Exception.Message)"
     }
     try {
+        Write-Host "Collecting Windows store apps inventory..." -ForegroundColor Cyan
         Get-WindowsStoreAppsInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get Windows store apps inventory. Error: $($_.Exception.Message)"
     }
     try {
+        Write-Host "Collecting Windows update inventory..." -ForegroundColor Cyan
         Get-WindowsUpdateInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get Windows update inventory. Error: $($_.Exception.Message)"
     }
+    Write-Host "System inventory collection complete. Generating reports..." -ForegroundColor White
     $params = @{
         InventoryFilePath  = $InventoryFilePath
         ReportBaseFileName = $ReportBaseFileName
@@ -146,16 +156,27 @@
     }
     try {
         New-SystemInventoryReport @params
+        Write-Host "System inventory report generation complete." -ForegroundColor Green
+        Write-Host "HTML and Markdown reports generated at: $($OutputPath)" -ForegroundColor Cyan
+        if ($HTMLOnly.IsPresent) {
+            Write-Host " =>$($ReportBaseFileName).html" -ForegroundColor Cyan
+        } elseif ($MarkdownOnly.IsPresent) {
+            Write-Host " =>$($ReportBaseFileName).md" -ForegroundColor Cyan
+        } else {
+            Write-Host " =>$($ReportBaseFileName).html" -ForegroundColor Cyan
+            Write-Host " =>$($ReportBaseFileName).md" -ForegroundColor Cyan
+        }
     } catch {
         Write-Warning "Failed to create system inventory report. Error: $($_.Exception.Message)"
     }
+    Write-Host "Process complete." -ForegroundColor White
 }
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCQrQC+oWXOMCP2
-# SGoFb7D5TMdhFnrUxnSIySnP1aOM8qCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCY13lMvGjYWchF
+# gJXxBybakyf24LvCqVKX7IFLTEqA+aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -331,31 +352,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAW9rb19+tfTcChKxbzwfS8A6eu+4Lf6uQtXi7bsl3/
-# wjANBgkqhkiG9w0BAQEFAASCAYAd4qMtGJ9Vpf6DYZIjmQd7gJBoEnL9XMj6BRBW
-# xobbbJAKeD5Kcl6oCgrrUklFpF903htXWd2W7jkcUfXH6dSVXt1/JxjeBC0KFmBX
-# E/spdkSQf1jYsTLM/YZSoASFrhpftCUeEOk9Uuf7Z14Yo8e9mI9IjihTO5x4Zs9W
-# BYmZM5am8fGDGyYO2hgLbujyg4GO1zk8tQ99q2oV6s6+4/LU6HvN85G4Zuo2Lp59
-# L63dzAhU9CofC1o9WAcWNidKke3UokGhITFN9MS2l24yu501+EUsy6l79Bq03jTd
-# mZHyNweaeHZjmUZo0FvFFyOf43f0a9NxdYzaJnhVXdrdyL+VkfMzhCxnpcn7JFDE
-# rIFMhFQhPwiOLNYIG5KklaMETMYUJnJHC+jj/BxUBq9hlVF7chjyz+jFX7j//TZa
-# fgniWFSAEcbmgCOF5mwX+ltkyYjm4/cMVu/BWhMVjyh4itNdp6mFI7OlPLFAhjy3
-# ud/kSOu0gm5ebMyAND57W5F6PBShggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCIc7i/6OTmBV9Ru49eXTCrP995dys7xZPOj0pp64Xi
+# mzANBgkqhkiG9w0BAQEFAASCAYARhclcO27nCaLfVr5H00z2Z5T/aC73q1N7/se+
+# RGVIFzKWVyeR2lvqeiZoLhvCWrbdZPs+tJJKCTrmUV7cw611aMFdQxZqqx41ZjHQ
+# dU6nWLL1CBkW8UYEVeDt/9DS0a3UEDywKb3bXFCFuj3lCTBrhHvLgoh4b/lHWhUF
+# en5zIRFco/2JZ+rugzhGfiUv0U2dPAwjZrjL9D/36zyBALWh3Npux4Pd0c81Uzmx
+# HTT5xgIXx03v5oLybO4iNE2JgkeD+FG8r6OPNIrzYSyHJNzC3NPMrsBSJASuerjf
+# aRFFBcT+85bnB5uwXU4SLP/LCOTxHB3Lk01SyCMaTanQmKsBlOcAfLIljknU6ja0
+# uhTS4iyzvpKl6Xg3GoGEGhIGSQJ5mCr7Y2gWzIgczulla9YQnIiMdMgZqJa3bqiW
+# zQ3DYK6t9lxHOX/THm18CJZzBCC8OMPGklDoMZwWOgQJcN+71xZhHd0LztEv1FwB
+# Xr4ZrBUfFSjFeFHvFH44wMrkHlChggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTkxODQ0MzRaMD8GCSqGSIb3
-# DQEJBDEyBDD7mJFOMh7zTHBMlqGqUIoZnRpXg60Az3Bh2bgQiurkCPZ1OHV7ppth
-# vq+zurAqnckwDQYJKoZIhvcNAQEBBQAEggIAo7Q4onKFiuOaF0yvx1GLLjJK2EK2
-# LioYY6u4XU+HeMluVyCd5zvArrHx0zQNJlkFfmKh6qQxvhAMtsXHpNJPuy/IRHwc
-# TDj0hA0c7+ZKoMrWZCjGVFw0q8Dj9oNYrGEHysnJgXi1H8OWiN5Hx6Qivjf+3VIc
-# nZK9fU3q84GuDEQfftamVTRh5ZbdvhaVRDPNF5a69aoygfmPRjO6yHphUWBBITtU
-# rC+AIUjDEjYEIY7EEWs21wUk4e25JcVKFxXv4MmBX+WmiaHLmIAVVRP9sNt+xi60
-# DSl/xEQQqPZtMNq4jaoR86zuXG6VMV6e4VgSa0bz1zP4OKNARw+njeqrx2hC8v+d
-# 11qIEpiSUJsQtV1UP+c7NrGOPZwSJq0pHMaSgPX3w5ymDT860wBkoziZYvgtFTaN
-# U+kMbLHB2TKQHgLZfFYPQSFqLdJBQWk+Nk871zbQvwp7S7Sx846Es5N6j/T+2YFb
-# DtQzB965opQCv8JadoN7SnVfhEkYAIZWfV+u9s7H3MRfSqsdMvmqMNzLbH6lPQF5
-# NqqX9+vaNdJ1XFODaB9/x8rZn2kDa005Le6JAVLAq0ongSkMAJCC159eZF9ZKbU5
-# JSuuumCu6C3dGxPzOz62ZAV5WjdhqpIWx+WYFyY/dqsyRU7yfnNge4CwOmmADQor
-# qRT8y1DHCfN6lO8=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTkxOTQ3MTBaMD8GCSqGSIb3
+# DQEJBDEyBDANdIKEv4bhRLU3rMVGR6bDNEwOdSzDAFuKIKRbbNYNgfHmeAtDXz0b
+# HJRwCG/iqJcwDQYJKoZIhvcNAQEBBQAEggIArQYlilv/AEQHtQV8qpJB+D7Viz/N
+# QLPXHqvcvcVj1c0OWT1nRcrlQjPUvyIEGjJqi4gNiMx+STtCAjZ1OSjbXg4rAoN8
+# kbkLAlSoEXMQoFxqpRVeV7ZtcuOSiTqXeVHKTztcXvrAu4xziv8VH+SOCzKMDMHA
+# DlnY5ibySuYUtH6NQBa6dJLejcV8KlTqfDVZC/uTSSqs4ikg9xyN8dEakOdtlY0V
+# mRhKGnmhTit7S59KAFqr39WsIvml1qFVBR6mgchKGQkajEK367Fbj8Eevtz+TJCZ
+# UI2kpRDc/9vFx6HVlB3BJvAQp1jiTVRWXIWYaLxX60FNsUljGD9duXi1om9fjvcE
+# sKvNvLWPYuYWoabFUkFfKVBVHWwoYSINfsARgjPWVOtmL0OgCxl+8RVRgoSsvRv5
+# 0pb+UTH8RUoVr4Ze6DrFhOxuq0moSnUE2xS68tolHg5AbpezNeA+pkIoZck0p49N
+# Cg49q8LOEvL7tzPyQ7c1i9gUz3TBMzyvtH6HX5C64wBylJuRx5gsxTkOF8afK3O8
+# ZgSOKo/uXkynn4alCPD4pZu2xDnm8ZVZZRpvcuFkyvrt7LQOV8EYT9Eh1eVbFOSF
+# nbNKmuw1dzw5OCXDp78W79E7Qf3NHUQlbqSc3LSqbGfwYsfG8MZeMLbxGjam06lD
+# UpGMTP3SuvBZkfI=
 # SIG # End signature block

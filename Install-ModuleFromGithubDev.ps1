@@ -80,4 +80,9 @@ if ([String]::IsNullOrWhiteSpace($ScriptPath)) {
     # force re-load the module (assuming you're editing locally and want to see changes)
     Import-Module -Name $($ModuleName) -Force
 }
-Write-Host "Module has been installed and loaded`r`n" -ForegroundColor Green
+Write-Host "Module has been installed and loaded, The following functions are available:" -ForegroundColor Green
+
+Get-Command -Module J81.PSScriptTools | ForEach {
+    Write-Host " => $($_.Name)" -ForegroundColor Cyan
+}
+Write-Host ""
