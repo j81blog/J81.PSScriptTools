@@ -38,10 +38,6 @@ Write-Verbose "ScriptPath: $ScriptPath"
 if ([String]::IsNullOrWhiteSpace($ScriptPath)) {
     $Uri = "https://github.com/$($GitHubOwner)/$($ModuleName)"
 
-    if ([String]::IsNullOrWhiteSpace($RemoteBranch)) {
-        $RemoteBranch = 'main'
-    }
-
     # GitHub now requires TLS 1.2
     # https://blog.github.com/2018-02-23-weak-cryptographic-standards-removed/
     $CurrentMaxTls = [Math]::Max([Net.ServicePointManager]::SecurityProtocol.value__, [Net.SecurityProtocolType]::Tls.value__)
@@ -71,17 +67,17 @@ if ([String]::IsNullOrWhiteSpace($ScriptPath)) {
     Expand-Archive $file -DestinationPath $installpath
 
     Write-Host "Removing any old copy" -ForegroundColor Cyan
-    Remove-Item "$($installpath)\$($ModuleName)" -Recurse -Force -EA Ignore
+    Remove-Item "$($installpath)\$($ModuleName)" -Recurse -Force -ErrorAction Ignore
     Write-Host "Renaming folder" -ForegroundColor Cyan
-    Copy-Item "$($installpath)\$($ModuleName)-$($RemoteBranch)\$($ModuleName)" $installpath -Recurse -Force -EA Continue
+    Copy-Item "$($installpath)\$($ModuleName)-$($RemoteBranch)\$($ModuleName)" $installpath -Recurse -Force -ErrorAction Continue
     Remove-Item "$($installpath)\$($ModuleName)-$($RemoteBranch)" -Recurse -Force
     Import-Module -Name $($ModuleName) -Force
     # Clean Zip file
     Remove-Item -Path $file -Force
 } else {
-    # running locally
-    Remove-Item "$($installpath)\$($ModuleName)" -Recurse -Force -EA Ignore
-    Copy-Item "$PSScriptRoot\$($ModuleName)" $installpath -Recurse -Force -EA Continue
+    Write-Host "Running locally" -ForegroundColor Cyan
+    Remove-Item "$($installpath)\$($ModuleName)" -Recurse -Force -ErrorAction Ignore
+    Copy-Item "$PSScriptRoot\$($ModuleName)" $installpath -Recurse -Force -ErrorAction Continue
     # force re-load the module (assuming you're editing locally and want to see changes)
     Import-Module -Name $($ModuleName) -Force
 }
