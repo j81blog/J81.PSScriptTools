@@ -9,9 +9,9 @@ environment:
   GitHubKey:
     secure: oQiZ+bhbS5xA+tjgAIVgKU7sMwChNJJn39uEGpVDxeXA5UGlM6hj02RnFb5b8fWplimsRaysdj+3qCbdT00WD+D79J7jouPQc078rih+P0Dm5e0+3cPlvKtEcjVWFtmK
   NuGetApiKey:
-    secure: YwxXd/Jx/yaf0AGulj6ORENSYo09OESJZ3kJGzVH8xxkLDOQEMhaUFO3tuFg71bc
+    secure: l0GYSIvSQRZA51YfnSsyYZ0t9jn6NsS4uMfm3ewFXYYRreg1CFGDVjmqf4qfTkxE
   NugetApiTestKey:
-    secure: 8g8ojouW10W8RQ922a5uRcfpavoWESCftkitrBGsMlQWo4HDoyQlCgr3Sb98tXAQ
+    secure: 5aiwy1W8GPme3dwp7qSqYctLMJCF6j7hUgzjT6qb3qyhlz+dx9Ow8i7xJpFkg925
 install:
 - ps: . .\ci\Install.ps1
 build_script:

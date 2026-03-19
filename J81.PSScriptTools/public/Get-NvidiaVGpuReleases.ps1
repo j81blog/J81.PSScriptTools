@@ -54,18 +54,26 @@
 #>
 
 function Get-NvidiaVGpuReleases {
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Default')]
     param(
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $false, ParameterSetName = 'Default')]
         [switch]$Latest,
 
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $true, ParameterSetName = 'MajorVersion')]
         [int]$MajorVersion,
 
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $true, ParameterSetName = 'DriverBranch')]
         [string]$DriverBranch,
 
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $true, ParameterSetName = 'WindowsDriver')]
+        [ValidateNotNullOrEmpty()]
+        [string]$WindowsDriver,
+
+        [Parameter(Mandatory = $true, ParameterSetName = 'LinuxDriver')]
+        [ValidateNotNullOrEmpty()]
+        [string]$LinuxDriver,
+
+        [Parameter(Mandatory = $false, ParameterSetName = 'Category')]
         [ValidateSet('Active', 'Older')]
         [string]$Category,
 
@@ -102,6 +110,15 @@ function Get-NvidiaVGpuReleases {
             Write-Verbose "Filtered to Category: $Category"
         }
 
+        if ($WindowsDriver) {
+            $results = $allData.Detailed | Where-Object { $_.WindowsDriver -like $WindowsDriver }
+            Write-Verbose "Filtered to WindowsDriver: $WindowsDriver"
+        }
+        if ($LinuxDriver) {
+            $results = $allData.Detailed | Where-Object { $_.LinuxDriver -like $LinuxDriver }
+            Write-Verbose "Filtered to LinuxDriver: $LinuxDriver"
+        }
+
         if ($Latest) {
             # If Latest is specified with Detailed, return only the latest version per branch
             if ($Detailed) {
@@ -130,8 +147,8 @@ if ($MyInvocation.InvocationName -ne '.') {
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDXm25VwnxyL3uZ
-# elySkNq+LV4xn7eO+5yjMht97cwgv6CCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD++k6LuI1ueId5
+# YIY1WWaSuX3D1/mQwN5+VWqH+rJdhqCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -307,31 +324,31 @@ if ($MyInvocation.InvocationName -ne '.') {
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCDzl+JIJkZZ+fagA+esKuB4MsqgvXcOpulZ35ZBCR3e
-# fzANBgkqhkiG9w0BAQEFAASCAYAkwOO/8L82v0zsLfdQCr8PQSylZzKeINfak+Wm
-# RuSzgHfJ34pn3ZBVi2DPvFH4wE6Ye5+jbggBT4RqiJaLPLA3u/dI5M76fr13V0Lh
-# 1zfM50rRjZTenpwxi8DoFlk9eiiVsqHDHreYe30ALazhQFrDlDi5pRM70iP2QSpt
-# NVf0rkDQTTIHzyQxqENt7335xGcBMqTYikgM686LrD44PziEFke4LXGfzEAejINo
-# VI6cob2Ldm8uN3PpkKMJAxrRsMieVsZ+SZoW5VnIaC7xkA1+cY+HyRbns2y5TOV0
-# +1L6rVpDDE9oR1dNXN9IPc2X9ihnWF05HXMGePZ6MnEWW516VccXZCbf6OzLLKk7
-# u1gnA1MJ4lukjE1tXPktfjOiU1wc15wXvB2eP+BzNM1OHQPZfsNHFPq2bXxVTK2s
-# EtGINdudMqYNDNPzIPnlfZ9mD0r4xTNy9qPajJZcHMIA4z8LhgnBJgx98C0G/XOl
-# Z08KDePy+grdb2XD8ei4+k4NbVKhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCBeAFosCtmxqB4st1LmD+wt4b70SA2qB5N139NoqCQC
+# 8zANBgkqhkiG9w0BAQEFAASCAYC5iuLQ6day8zzBFU6HgKruLMSXbk19AEesh9k/
+# ikY0SE3vE3OQ9JtcY93XJDCiVK3xhua3z7UOD8pKOqZfTJEwcJTKr1Uvh7qBhaSe
+# jZ2wBErriV0x4jauAcT0mdkXHGgIoXhw/hkSFqMwnKTNhD1gce6bvd4GfyuN0icR
+# uBjOUnD5g62PMZyAfDcrMum36lnl0sN+5IO3z/WnECFuRy/9n9Tg0kwuTnjUQNIc
+# 6aKnzyYl56kHcqtF3XuEx0naiadNtLpkDSI5h4DeFqSvegRcej5rp5JNzzP+pswA
+# NGEyBTlM7oaI3GDWGKCsJQqGFyedCMw8XItGYXX1FTvsOf1BRKLYvToq9P/z/RXw
+# XEdqfx1LG/BhWNcbl0h0NAp0hJ/AITOcNGSZ0RqnueLsYFbO3ULoMKSIOmp6ajQ1
+# iWTtmDzg4PMaebx1hhK4rxRtVzfWj/kzWQOO1wtNCjdIsGEY2F0s6J1LsVz9OLvO
+# 4DpSMpGiYx2WekVwlVtQYcHJ+FWhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODUwMzlaMD8GCSqGSIb3
-# DQEJBDEyBDBI2TkQ+Pg/iU0idYYIX7sRU7G+59pLtv9Xm7x4TEjVIx09f/xQTazA
-# foksdaCM0sgwDQYJKoZIhvcNAQEBBQAEggIAlFuAEainYa3de1xWkauji05L7dmq
-# qkUfbxu6DJk7BCc6F3O0vy2OF9MfC4ZW1JS+KaoGm8HVQ9j0g420bXRtw9KucKKf
-# F19mPuLCncUY4kexVcpkTReKFYL+yyhQ4GBTM/OmiinqgOtdi7T4gOG3AkHw7N5B
-# r33gk2O3ldP0s27TNhPLnjrBbwmv/bmjSzCOkXNa30YeApKubId0jkiH0S4TVo2e
-# yYw3OFPtk3tME6oFD8uh493hjWYKlbzm92HX+T9w6cdsxPhnbROrNY4UmYdxN6y2
-# K4Cjb6I8xpeDxHY1u4Uqsmch2oMF3MtL9PdR+i8Qh8qRuR55jPlgeBcEhQyU5zh+
-# o2wpLAH+oJnre0zIwqW8k6pX0flXJekSt5U40FVtOZbJPwTKdoJWbR0MLm3lXvJH
-# qIzDzdQA6dV50f1WfJ8Gq1Q1dcoOPVowf0JhfXdCzRAjtA9cPaZ1T3dXMVYH6ypL
-# XYb4vCLLz7KNvnZhsq3l31Lp+6Rh7d2KUlP/EUD99MSO/cQkgTRpKNZ6uSpPn8pW
-# BjRm9OJn2kttkKbWx+4H2WbEB6Tz1ml4KoGWBZYHaXF9Mn+4Pg4B7MpW8iUchc6v
-# BihgxFxrZHnF5/8R7F2tNtw8Il6qxai/97P92njR1gJzewY/eCNGuN2NpG9Xk/wM
-# AEft8QLzYIlu7DQ=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTkxOTIwMTFaMD8GCSqGSIb3
+# DQEJBDEyBDCdV/amTf9PUl6QYQkliej2VW7dndSssWJ4vsL/8mt5kS8si7bzxDyv
+# VF1QN94p9lUwDQYJKoZIhvcNAQEBBQAEggIAm4EhgAgrO8OmjJWsNJ849vmBui7o
+# P2C30SVkSk8+wgmGMDMr5r+agq3fcMf3d1tcgmM7KAL2BjlCt83JucchI777DsGR
+# JUXZxEyTb4azBlyv2un+p3Q6pVvbTeXrw05qN4g9za9gEdE5FlCAEcviS4Fcxb3K
+# DCX/zK7vC8/qBdLQIwRf/hhU2JyFZXuQoFWJMlUWK0FvbFl//kC3RCWeOZGVWKc/
+# DTIF6nVAmHOuySfewD5pfeiPIlFAf1IdO8BElgz3W8a0QBaL+/gRUSN+CAHbrMyR
+# i8iL/1+1SQubmfRdFcg5xIkyE6YY7FZ5k8wh3Zu0HrmQM93/bT8S5qMVE9OO2QEn
+# 0CIRb1mhNLaKQW+JTJ75J4dnFK/cXlF+65PCfGPt7pBxdwSjhJFeBgJWhmmp/+dF
+# wtW27JSrahCzGaiWG0FUqWFUv68ilg9DcqbQM7A3qYJEaLqbTSUuTZRIu9cwuajk
+# amBBPHqCFKjGzSukO0B2FL8Tle6w3gROh7zAVbiqun7m7Jr6MpH0zYTdAG5GtTLM
+# CNIFaRVF5sb+dGv7C3iQx+SC+5tfyJ4lqQwdhSMtoyNpz3TjLQ5zlaUWkmvIJCo0
+# H5SydMXUg7LZwVP4PT4pKChVutJhuaw2jRk/u+Eg37fExkGtNcsBGCjdVeVeIoVf
+# DxUSljNC2i5MBmU=
 # SIG # End signature block

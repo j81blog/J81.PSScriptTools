@@ -73,7 +73,8 @@ if ($env:APPVEYOR_REPO_BRANCH -ine 'main' -or $env:APPVEYOR_REPO_BRANCH -ine 'de
     Write-Host "==============================="
 
     # Tests success, push to GitHub
-    if ($res.FailedCount -eq 0) {
+    Write-Host "Checking test results ($($Env:FailedCount))and preparing to publish module(s) to the PowerShell Gallery..." -ForegroundColor "Green"
+    if ($Env:FailedCount -eq 0) {
         Write-Host "Tests passed, preparing to publish module(s) to the PowerShell Gallery..." -ForegroundColor "Green"
         foreach ($moduleItem in $moduleData) {
             Write-Host "Publishing module: $($moduleItem.ModuleName)" -ForegroundColor "Cyan"
@@ -106,6 +107,8 @@ if ($env:APPVEYOR_REPO_BRANCH -ine 'main' -or $env:APPVEYOR_REPO_BRANCH -ine 'de
                 throw $_
             }
         }
+    } else {
+        Write-Warning -Message "Tests failed, skipping publish to PowerShell Gallery."
     }
 }
 

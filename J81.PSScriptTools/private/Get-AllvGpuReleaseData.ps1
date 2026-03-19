@@ -9,11 +9,11 @@
     Add-Type -AssemblyName System.Web -ErrorAction SilentlyContinue
 
     # Check if we have valid cached data
-    if ($script:NVCachedVGpuData -and $script:NVCacheTimestamp) {
+    if ($script:NVCachedVGpuData.Count -gt 0 -and $script:NVCacheTimestamp) {
         $cacheAge = (Get-Date) - $script:NVCacheTimestamp
         if ($cacheAge.TotalMinutes -lt $script:NVCacheExpiryMinutes) {
             Write-Verbose "Using cached vGPU data (age: $([math]::Round($cacheAge.TotalMinutes, 1)) minutes)"
-            return $script:CachedVGpuData
+            return $script:NVCachedVGpuData
         } else {
             Write-Verbose "Cache expired, fetching fresh data..."
         }
@@ -195,7 +195,7 @@
         Write-Verbose "Found $($allData.Detailed.Count) detailed release version(s)"
 
         # Cache the results
-        $script:NVCachedVGpuData = $allData
+        $script:NVCachedVGpuData = @($allData)
         $script:NVCacheTimestamp = Get-Date
 
         return $allData
@@ -209,8 +209,8 @@
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCpefx7/O+xW5gP
-# sLBXe2aPcgWDziRV5dHPwg66fpWDgKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBgcV4r/zGFsqw8
+# DPg59ezO08RQ/VZETmpk2p9xNXnIpKCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -386,31 +386,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCAKPxasbSnXPzMF+gY72qg1ZqPshCbw+lRA396Q5BFw
-# /TANBgkqhkiG9w0BAQEFAASCAYCxA4IYTb4nvUEAWdjpgWseTUFMLML1krJ0oFfj
-# u+oAV1GOZGOI90MhjBlTVou4So5AOYyWtGtTwVONjRL1I/x8orLEubFV0BKZWrAr
-# pGsUyhncERomPZ5VAJElGrUdu6kVWCTOHyeaDocH1SwEsn8R3j7b8DWE+A2BhK1n
-# OvUbAzJ7ZIx/6vtWd1JirVtEr7Zu86azKQSxETBpvyCsU43AmMuaSlk+YaL7Korj
-# QIl/QKUIP2StrOT9AS+9WqVNHYgQSbQIu16j/yIoBRVSpXSM7OTzoUFM6lslg1pW
-# vVxIofwZKyvJ2QoOxkWiNVM69uPHJSAPLgXFA8QaidAcO0QctNhRRKV7ctwD8kIH
-# GsOwBlgWIcGz8MOQa/H7EoKhzri8wc8m48mzxkmFJA9RW2Q1KQ9MOweVm5Jp4k81
-# 1mUY5rR0rmZxkwHMzokOHhsc4sm4BiORNFBA0LaOnwLHQjDP//s30Ppt+5wADh1e
-# CVyt2V/e6spo8jsvgj86n2tx5O2hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCDeRryE6a0ozul1QPcXu+2zpbu2xlW8u2OsfJG/0ZIn
+# rTANBgkqhkiG9w0BAQEFAASCAYCHUd59lqCVYkRX1yt+QsN7Jg3/EOi9W6OXssXu
+# /vIualtDVpJDmtA2S1EjBmjJSE59JXDfho4Cq+ABYey48+Th6HgIn1euXnGAMLiP
+# 7pVY4l6Nu+LR/ChnsfFlRjQ59D59QY7nQ5AnNYr9Jq4kUaDQRM19spE9hlCIuNo/
+# 6riGZ6QmOb9GV42mfat9Q73hjelOdiD6kEHAMrGQv7JbtAqxhKZU+QY13iazk4iY
+# U4xFQ+LEulFTaxUOK2u5SxLcnVxki9us5tQYVlinigHLbBN7bQof1Ry8sIsUZSla
+# jz2O5YFwRBIVPY8GyBkc+Hesp/53qJKWTOhiyEnNu4rBh9KR7e/vNzBCWAfhIlMU
+# foEA5IHjY1IknYX5/RxsY643I3SeYxkbdSqMJcdd0z5ZD+RCVxDHfoWu29F4i+UI
+# fSQ+WHdvXNYikR/xgxVsszC126mLOc1qHHGp/o/v8jF/Eabpl0TKxJu9Z0WEHUBv
+# tVlvNdRt51J9tQqoYE+ayJZnvLmhggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTEwODQ5NDVaMD8GCSqGSIb3
-# DQEJBDEyBDAygg1VJXl4vcgoArEQd684Yta0PFrucaXEghlOP9zqZjGFnkcEyZ6A
-# QddiFJzP6OQwDQYJKoZIhvcNAQEBBQAEggIAivpLQkrtpesDh0CqvV/j2anwwjPK
-# NanbLNv3gKPBgg46aeKwsmQFTrpiRHUYCu3WF3yImlIhy4Pn9DaARhX+nMNfDx5S
-# fPac1eZoZO9EUgF3RyAv3pLBWPum22i3orHGuc7cC41rQ2ZncBa3WlVEI4vsX0za
-# WqDt7SB0yANgOqDjFBRYraGJDm7ty0+CFqFVENJ9EKYZYFvX+ccspaoeSOa3LLgL
-# EFeqUoYfKhZMwOCfdixdWdI4uRtgJeDcmQxO7ezQOp3r13HiGdGtlTKPrU41B5Ya
-# a3DwtgOGgTYUzJBkQuob2xyEnoeroxmLgXPWkzSrNuejdILrM22zsihlfhh9BnJT
-# iGDm0rS+pw0utmoIK63Xiv+qFcEqb8Q1XL7YTe1ml4vaN6nELV5iuHR71lwEtH6p
-# /cp77+HOD9GkbWKBnAuhQS5ljyPxewHOEfTJPl7P15FfG0FUlp+apyTmxdVQ9J72
-# dO9vByKAdTjjuEEve0qxpBvA+WUholZn/Qa/C13goFtXnv3L7h13GO0QHX1/efIm
-# UfIuLyKm+ljdwc2NXbhZE0tNsfXO1bAxzNclomclZQB17Siq1BYH7HtXxhpVYcQY
-# IMCnU7qoYEOysLxUIgFE3LkBmfKRyIhS7PCqTaM4/Uwqz5RBAvsMKKRUzuZkzFgk
-# tmdP++t2ixt2wbk=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTkxNTQ4NTJaMD8GCSqGSIb3
+# DQEJBDEyBDA0OYI4W/Y4S/365TbISf8QMtwwa3lK1wo/DrFflvBDqm/WyKTtSAZi
+# CH2h5I94JXQwDQYJKoZIhvcNAQEBBQAEggIAxzGnarVPyCCKEp+0knscoLhqjxL8
+# ZUQ+Rzcjks1oGAvc++ew6GHZOix0CudqewJxfcpgA1QAkvaJwVH8Rx61Ch7pXQVO
+# /J01u4heETw5fyLWf60olEKMoL0SCUFoDeUWrofwOXIiS/ps5Vb3MLDTAHG62cSg
+# wDo1Oq7jsfxQOPqpWUMrdIttkiXQrAzdlWyIeb1XtTV6EK+OnSpHV0kfPvsh1XJO
+# V6LHJjopK7Ang15r1i/6POiwcsg4xmx8vrpyw7flrrZIzrWPcnioKwlzDeDneIBw
+# 12sHFmUI/ooHZn2fqhWqW8KVqBQgbQMhBX83H1mWi+VRoh30+EplOl2VMZ/9pcOV
+# J8jlBHnfGCEExMaotdXJbM0moIVHrqlNZqez8kHK/PmgWaYZC6IxjKX9My0gO4UT
+# 8VcNo0+QuLN2d5JMxbhKIdax5gC6WG0sUwIkbaHpq0NiHf57XGu78kSgLMYWDj2c
+# BmKmF5sfPEol/8rrn469H/nUb7C5/KaC1UPpCT1R9fxU7tadZA6SFK3pspJDSMgq
+# LK57+GVioFf12nVKjhmemm8RR/aELOVnypiQR5QRnnYz577zEL+r+qU8YhUBWAhv
+# Oqs3A+SLActrswuLx4V6atZT7Gpo0DTNaEYe6h3Et97WeCKOLxovdWG1wrnoErD5
+# iWFFJrbiYeKcpBY=
 # SIG # End signature block

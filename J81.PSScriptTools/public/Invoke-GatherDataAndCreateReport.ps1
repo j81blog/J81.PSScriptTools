@@ -1,54 +1,182 @@
-﻿[CmdletBinding()]
-param(
-    [Parameter()]
-    [string]$ModuleName = "J81.PSScriptTools"
-)
+﻿function Invoke-GatherDataAndCreateReport {
+    <#
+    .SYNOPSIS
+    Collects comprehensive system inventory data and generates HTML and Markdown reports.
 
-$CmdLets = Get-ChildItem -Path "$PSScriptRoot\$ModuleName\Public\*" -Filter *.ps1 | Select-Object -ExpandProperty BaseName | Sort-Object
+    .DESCRIPTION
+    Invoke-GatherDataAndCreateReport orchestrates the collection of system inventory data from multiple sources
+    and generates formatted reports. It gathers information about:
+    - Printer drivers
+    - Installed software
+    - System information
+    - Windows AutoRun entries
+    - Windows capabilities
+    - Windows optional features
+    - Windows Store apps
+    - Windows updates
 
-function Get-DateTimeVersionString {
+    All inventory data is saved to a JSON file and can be exported as HTML and/or Markdown reports.
+    The function handles errors gracefully, logging warnings if any inventory collection fails while
+    continuing with the remaining data sources.
+
+    .OUTPUTS
+    None. This function generates files on disk (JSON inventory and HTML/Markdown reports) but does not
+    return objects to the pipeline.
+
+     .PARAMETER InventoryFilePath
+    The path to the SystemInventory.json file containing the collected system data.
+    Default: "C:\ProgramData\SystemInventory\SystemInventory.json"
+
+    .PARAMETER ReportBaseFileName
+    The base filename for the generated reports (without extension).
+    Default: "SystemInventoryReport"
+
+    .PARAMETER OutputPath
+    The directory where the Markdown and HTML report files will be saved.
+    Default: "C:\ProgramData\SystemInventory"
+
+    .PARAMETER HTMLOnly
+    Generate only HTML report, skipping Markdown generation.
+
+    .PARAMETER MarkdownOnly
+    Generate only Markdown report, skipping HTML generation.
+
+    .EXAMPLE
+    PS C:\> Invoke-GatherDataAndCreateReport
+
+    Collects all system inventory data using default paths and generates both HTML and Markdown reports
+    in C:\ProgramData\SystemInventory\
+
+    .EXAMPLE
+    PS C:\> Invoke-GatherDataAndCreateReport -OutputPath "C:\Reports" -ReportBaseFileName "ImageInventory"
+
+    Collects inventory data and saves reports to C:\Reports\ with filenames starting with "ImageInventory"
+
+    .EXAMPLE
+    PS C:\> Invoke-GatherDataAndCreateReport -HTMLOnly -OutputPath "C:\InetPub\wwwroot\reports"
+
+    Generates only an HTML report, suitable for publishing on a web server
+
+    .EXAMPLE
+    PS C:\> Invoke-GatherDataAndCreateReport -MarkdownOnly -InventoryFilePath ".\inventory.json" -OutputPath ".\docs"
+
+    Collects inventory to a local JSON file and generates a Markdown report in the docs folder,
+    useful for documentation workflows
+
+    .EXAMPLE
+    PS C:\> Invoke-GatherDataAndCreateReport -Verbose
+
+    Runs the inventory collection with verbose output to see detailed progress information for each
+    inventory source
+
+    .NOTES
+        Function  : Invoke-GatherDataAndCreateReport
+        Author    : John Billekens
+        CoAuthor  : GitHub Copilot
+        Copyright : Copyright (c) John Billekens Consultancy
+        Version   : 2026.319.1945
+    #>
+    [CmdletBinding()]
     param (
-        [datetime]$DateTime = [DateTime]::Now
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InventoryFilePath = "C:\ProgramData\SystemInventory\SystemInventory.json",
+
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$ReportBaseFileName = "SystemInventoryReport",
+
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$OutputPath = "C:\ProgramData\SystemInventory",
+
+        [Parameter(Mandatory = $false)]
+        [switch]$HTMLOnly,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$MarkdownOnly
     )
-    $Hour = [Int]$DateTime.ToString("HH")
-    if ($DateTime.Minute -eq 0) {
-        $Minutes = 0
-    } elseif ($DateTime.Minute -gt 0 -and $DateTime.Minute -le 15) {
-        $Minutes = 15
-    } elseif ($DateTime.Minute -le 30) {
-        $Minutes = 30
-    } elseif ($DateTime.Minute -le 45) {
-        $Minutes = 45
-    } else {
-        $Minutes = 0
-        if ($Hour -lt 23) {
-            $Hour++
-        } else {
-            $DateTime = $DateTime.AddHours(1)
-            $Hour = 0
-        }
+
+    Write-Host "Starting system inventory collection and report generation..." -ForegroundColor White
+    try {
+        Write-Host "=> Collecting system information inventory..." -ForegroundColor Cyan
+        Get-SystemInfoInventory -InventoryFilePath $InventoryFilePath
+    } catch {
+        Write-Warning "Failed to get system info inventory. Error: $($_.Exception.Message)"
     }
-    return '{0}{1:d2}{2:d2}' -f $DateTime.ToString("yyyy.Mdd."), $Hour, $Minutes
+    try {
+        Write-Host "=> Collecting printer driver inventory..." -ForegroundColor Cyan
+        Get-PrinterDriverInventory -InventoryFilePath $InventoryFilePath
+    } catch {
+        Write-Warning "Failed to get printer driver inventory. Error: $($_.Exception.Message)"
+    }
+    try {
+        Write-Host "=> Collecting software inventory..." -ForegroundColor Cyan
+        Get-SoftwareInventory -InventoryFilePath $InventoryFilePath
+    } catch {
+        Write-Warning "Failed to get software inventory. Error: $($_.Exception.Message)"
+    }
+    try {
+        Write-Host "=> Collecting Windows auto-run inventory..." -ForegroundColor Cyan
+        Get-WindowsAutoRunInventory -InventoryFilePath $InventoryFilePath
+    } catch {
+        Write-Warning "Failed to get Windows auto-run inventory. Error: $($_.Exception.Message)"
+    }
+    try {
+        Write-Host "=> Collecting Windows capability inventory..." -ForegroundColor Cyan
+        Get-WindowsCapabilityInventory -InventoryFilePath $InventoryFilePath
+    } catch {
+        Write-Warning "Failed to get Windows capability inventory. Error: $($_.Exception.Message)"
+    }
+    try {
+        Write-Host "=> Collecting Windows optional feature inventory..." -ForegroundColor Cyan
+        Get-WindowsOptionalFeatureInventory -InventoryFilePath $InventoryFilePath
+    } catch {
+        Write-Warning "Failed to get Windows optional feature inventory. Error: $($_.Exception.Message)"
+    }
+    try {
+        Write-Host "=> Collecting Windows store apps inventory..." -ForegroundColor Cyan
+        Get-WindowsStoreAppsInventory -InventoryFilePath $InventoryFilePath
+    } catch {
+        Write-Warning "Failed to get Windows store apps inventory. Error: $($_.Exception.Message)"
+    }
+    try {
+        Write-Host "=> Collecting Windows update inventory..." -ForegroundColor Cyan
+        Get-WindowsUpdateInventory -InventoryFilePath $InventoryFilePath
+    } catch {
+        Write-Warning "Failed to get Windows update inventory. Error: $($_.Exception.Message)"
+    }
+    Write-Host "System inventory collection complete. Generating reports..." -ForegroundColor White
+    $params = @{
+        InventoryFilePath  = $InventoryFilePath
+        ReportBaseFileName = $ReportBaseFileName
+        OutputPath         = $OutputPath
+        HTMLOnly           = $HTMLOnly.IsPresent
+        MarkdownOnly       = $MarkdownOnly.IsPresent
+    }
+    try {
+        New-SystemInventoryReport @params
+        Write-Host "System inventory report generation complete." -ForegroundColor Green
+        Write-Host "HTML and Markdown reports generated at: $($OutputPath)" -ForegroundColor Cyan
+        if ($HTMLOnly.IsPresent) {
+            Write-Host "=> $($ReportBaseFileName).html" -ForegroundColor Cyan
+        } elseif ($MarkdownOnly.IsPresent) {
+            Write-Host "=> $($ReportBaseFileName).md" -ForegroundColor Cyan
+        } else {
+            Write-Host "=> $($ReportBaseFileName).html" -ForegroundColor Cyan
+            Write-Host "=> $($ReportBaseFileName).md" -ForegroundColor Cyan
+        }
+    } catch {
+        Write-Warning "Failed to create system inventory report. Error: $($_.Exception.Message)"
+    }
+    Write-Host "Process complete." -ForegroundColor White
 }
-
-$NewVersion = Get-DateTimeVersionString
-
-Update-ModuleManifest -Path "$PSScriptRoot\$ModuleName\$ModuleName.psd1" `
-    -ModuleVersion $NewVersion `
-    -FunctionsToExport $CmdLets
-
-if (Get-Module J81FunctionLibrary) {
-    Write-Host "Signing all module files with a valid code signing certificate..." -ForegroundColor Cyan
-    Get-ChildItem -Path "$PSScriptRoot\$ModuleName\*" -Recurse -Include *.ps1, *.psd1, *.psm1 | Set-Signature -ValidatePS
-    Write-Host "Module manifest and scripts have been updated and signed. You can now commit the changes to GitHub." -ForegroundColor Green
-}
-Write-Host "`r`nUpdated $ModuleName module manifest to version $NewVersion with $($CmdLets.Count) functions.`r`n" -ForegroundColor Green
 
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDpztr4tMLUHEnv
-# MdzyMiCyLfvO2gRVxtsyDaVSC4Z6uaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD1t+lF99yTFrtK
+# SQotXYLt2lK8mVR7qK21YO4CvEHiBaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -224,31 +352,31 @@ Write-Host "`r`nUpdated $ModuleName module manifest to version $NewVersion with 
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCBEsVbU7FkFsKYvcFw6iTA8pkDGvAIsH/W6hSYZQvwc
-# 3jANBgkqhkiG9w0BAQEFAASCAYBGSP4ALcHv5gIIHFehvy3jar47iCuFUFJ1jvEa
-# HKIVvNMmUDgdjVAFg1oleKyLHzYs+XWhO4HQ+mBaR5KiSFBwHici1TzrcHQR3y1e
-# ol64VPeMMVGAzTyYH5OfbzGX3x/iNxqA7Uiauk13vmBMYnhan9eOnIJSYCDzjwVz
-# Hmu7YwRE/YJnAczD0tx7P6DzOut+Kh8NS/tKyh+mngOQ/cwQGfX/afvNvJ8Y/27e
-# tM9HK4F+FgEPNojqCV2DvgPDP+eNvmATRMphaLP2o3Xd7KklOCoIc3mfDgk1UCzJ
-# D0mwn4LVy99rceuSNrskI3sBCm82IHC7QWEDlTgSRz5zylL4EOgwrORqqvNh5I9w
-# X9WFcahYySSGnfM3OAQqbZCy0kKASgQJK6rXmq/ANIIG5E5w7IPsFdepUOP+ulKS
-# wHEuxVs0WEEem0bVOvhaTpx6kl784sAPETA6GHbR2G/Ts3J+SN3hoc00m1qLs0qm
-# psE5ifkNS3l7dIERlmLjx2lnqt6hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCCcDXaTiQ/GCayxvgEa0ghkY3Bgwk5/dT7/5PB8TLB
+# tDANBgkqhkiG9w0BAQEFAASCAYBHBmfWICz1hBwAYfNNO32zlemTsNtK6ryc4aS4
+# Es0WrQB0XYbuEku/k4e1exH4o+tRj6O9urJ4Rs+IQpNKK61VqXLUFcNccqIy+lob
+# JqViKzO9U2/AVq0IivBBY8N2x/RK5ZNvyY54S9XhaKLKT7mVUncoM9Zb7DBoxw7I
+# DWIrcjiNMojtozNGOZSZclO9KeRUaGMuQtCThjYP9qKz0YHKUAwHXO9VGRpx1d6V
+# E9twzrmWz9TPi3atpsP24X02kHAdMLjrxYDj0J64vkY2Me6RryHDTD0FTlBEHp5x
+# Vd9WOBHzPwrpfHRU00OAGoWa1K7ciS3z14/OmYm5YR+teAo5HXsLrF7zrkQhgYyB
+# uG6I7x+JZOKQOlkHWc2LAv2UwtJ80day3bVioHXtelFIDNjhYfFmST/VSzzFhIGA
+# 6q4s83ed2IZuqosFYfQmPagJ1FO6KGFoQoW0iN1QlZyzvmSt4Opfa0lnnAPRKp8C
+# 4CQnBkDPW/Wj12sqxb0nlZyrIw2hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTkxOTI0NTJaMD8GCSqGSIb3
-# DQEJBDEyBDB+76clY3lRluoPEtOIcOWL13J8cph/yUbb3Vs6WOlAzHuYDlJFTOOu
-# TpbfxVtjVzgwDQYJKoZIhvcNAQEBBQAEggIAbgVQaiUckZOtDkvpXJzPe++1n6Bc
-# d6s5AHUU7lgGs09RrZ0uopgl7VDx9FN3p1kmtb6lrIh8aEIV+MC1L01+CyL0U/Zv
-# Il9W1TgKd7APQJCvEHOQwmimslFwlf01Vf0Qun8Qcdf4S7bv5gCgXzBQiEenxUZd
-# c5acp+ODSC+zdUbRpQFlkzrwRdDPg6Hdnto6F0ejwDAqR9wxyHolEQCXwqBX0D5L
-# iTSlKT59bXHUY1Ei9pjKliA2HQ729NF5WxznTQLqrEhdjvFw+CpZfFBvppJd2IN2
-# Tc7QfoSTuWSZFYZH4t/HNqpn16rH5Sg+Jmn80EkNclA5w1+jaxeAkFlUlIK9cGAg
-# 1FqiVYQEo+5/x3L8+VQEJI7DqRStw4qJcxDx3QF2XkZ4GvOLwMYBpGGGVDSxrHo+
-# XkJ/Wx72VkEWa6ULVqMorIDChkDkw3LC4p5xaoGXGVYC//funlUh3akc458gRE9j
-# DXGaxH8h+nFBzmc46wI8FFE2bfJ5e9sxZMOzUcQ0xNNysRrU7peB92H2CwFozuaW
-# ScUnfAuLRtFKTWC89bksbZ30ZtBcNT7a2cJB/73vhawwJcZIrirkQNkPjJzmzm6i
-# a03QSuLv0hSXIjq8Kdop0ReD2IwiAiTpMwHKnonyHcMsHWYUw85H6lJyMLkaJhwD
-# bqWHNk9EJLlaUrw=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTkxOTU3MTFaMD8GCSqGSIb3
+# DQEJBDEyBDAS5xfDgWHfWx54MUQBxMArHaK6bgY/D+6rcX0LF3H1/Wjh8pYGl9uT
+# DwHR75KWMTcwDQYJKoZIhvcNAQEBBQAEggIAvOYWMTtYMhbNOWDg9Ffd527i7hBI
+# sP544IDr1/Yd0a7fYDaoYU3BP6FtZSfP9VqA1N7lMrbwvmJSLysxIAHnzpz2ZSa5
+# /GMtXW0vnpiM3Eemjoxl5AjrtkwawfJzbPv9lFqtlFr/X9UoAFK3fJGmwHcepym9
+# KyrSaQh1dwtAeSUOtcqtd3D/ZZPTNM86cA3gruqgz4wIhMxRUvIjKmcMGEPsC41y
+# xeDgk9ImA/S7o9m5+6lAKvt+1T2/+KxMg97uvwnhTBFXVHW7oYAonhHCats67e9h
+# bph1YMn/IV8zffPuBR5Z67R9j7HzdY0nEOCP0oJ5lICveNs1O39X2dASjHGqAoLU
+# kkmzS+5lf8gt66h1NP2w58fWckZuOiz4klzYerga73B8WvjSvnM647vwIVlQKydP
+# zwRvnneHIQyQ4OG4dky3qA7Tg6HbuK8g7D/GD2bt+Xx1Unja65P/IQ1eQOVn8Rc9
+# pvvUK0csptGtS39dt2sgho29W3KtROKXAQ3ivOaHv2ZT8riDLIc2AxNiRpgqkKfI
+# N7DTy1zKnfkjbmeI033OoAIjCVGE/DZ2aj1V0iUzSr0N+BWlnBr7xLeCt4SXoC4T
+# gjESOICsvKTblcvHI6CPT0JSaVfKUt9FhZX/AUwMfQY0r1J8ATcNmKxdio0PBUXE
+# 2YBOq+ymxYC4LdQ=
 # SIG # End signature block
