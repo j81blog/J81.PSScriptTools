@@ -1,5 +1,4 @@
-﻿
-$ModuleName = 'J81.PSScriptTools'
+﻿$ModuleName = 'J81.PSScriptTools'
 $RemoteBranch = 'dev'
 $GitHubOwner = 'j81blog'
 
