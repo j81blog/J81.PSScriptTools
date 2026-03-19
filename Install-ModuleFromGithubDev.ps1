@@ -1,4 +1,7 @@
-﻿#Requires -Version 5.1
+﻿
+$ModuleName = 'J81.PSScriptTools'
+$RemoteBranch = 'dev'
+$GitHubOwner = 'j81blog'
 
 # set the user module path based on edition and platform
 if ($PSVersionTable.PSEdition -eq 'Desktop') {
@@ -18,9 +21,9 @@ if (('PSEdition' -notin $PSVersionTable.Keys -or
     Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 }
 
-if (-not (Test-Path -Path $InstallPath)) {
-    Write-Host "Creating module path: $InstallPath" -ForegroundColor Cyan
-    New-Item -ItemType Directory -Force -Path $InstallPath | Out-Null
+if (-not (Test-Path -Path $installpath)) {
+    Write-Host "Creating module path: $installpath" -ForegroundColor Cyan
+    New-Item -ItemType Directory -Force -Path $installpath | Out-Null
 }
 
 $ScriptPath = if ($PSScriptRoot) {
@@ -33,10 +36,10 @@ $ScriptPath = if ($PSScriptRoot) {
 Write-Verbose "ScriptPath: $ScriptPath"
 
 if ([String]::IsNullOrWhiteSpace($ScriptPath)) {
-    $Uri = 'https://github.com/j81blog/J81.PSScriptTools'
+    $Uri = "https://github.com/$($GitHubOwner)/$($ModuleName)"
 
-    if ([String]::IsNullOrWhiteSpace($remoteBranch)) {
-        $remoteBranch = 'dev'
+    if ([String]::IsNullOrWhiteSpace($RemoteBranch)) {
+        $RemoteBranch = 'main'
     }
 
     # GitHub now requires TLS 1.2
@@ -48,7 +51,7 @@ if ([String]::IsNullOrWhiteSpace($ScriptPath)) {
     }
 
     $HostUrl, $Owner, $Repo = $Uri.TrimStart('https://') -split ('/')
-    $Url = 'https://{0}/{1}/{2}/archive/refs/heads/{3}.zip' -f $HostUrl, $Owner, $Repo, $remoteBranch
+    $Url = 'https://{0}/{1}/{2}/archive/refs/heads/{3}.zip' -f $HostUrl, $Owner, $Repo, $RemoteBranch
     Write-Verbose "Url: $Url"
 
     Write-Host "Downloading latest version of $($ModuleName) from $url" -ForegroundColor Cyan
@@ -57,23 +60,27 @@ if ([String]::IsNullOrWhiteSpace($ScriptPath)) {
     try {
         $webclient.DownloadFile($url, $file)
     } catch {
-        throw
+        throw "Failed to download $($ModuleName) from $url. Error: $($_.Exception.Message)"
+    } finally {
+        $webclient.Dispose()
     }
     Write-Host "File saved to $file" -ForegroundColor Green
 
     # extract the zip
-    Write-Host "Expanding $($ModuleName).zip to $($InstallPath)" -ForegroundColor Cyan
+    Write-Host "Expanding $($ModuleName).zip to $($installpath)" -ForegroundColor Cyan
     Expand-Archive $file -DestinationPath $installpath
 
     Write-Host "Removing any old copy" -ForegroundColor Cyan
-    Remove-Item "$installpath\$($ModuleName)" -Recurse -Force -EA Ignore
+    Remove-Item "$($installpath)\$($ModuleName)" -Recurse -Force -EA Ignore
     Write-Host "Renaming folder" -ForegroundColor Cyan
-    Copy-Item "$($installpath)\$($ModuleName)-$($remoteBranch)\$($ModuleName)" $installpath -Recurse -Force -EA Continue
-    Remove-Item "$($installpath)\$($ModuleName)-$($remoteBranch)" -Recurse -Force
+    Copy-Item "$($installpath)\$($ModuleName)-$($RemoteBranch)\$($ModuleName)" $installpath -Recurse -Force -EA Continue
+    Remove-Item "$($installpath)\$($ModuleName)-$($RemoteBranch)" -Recurse -Force
     Import-Module -Name $($ModuleName) -Force
+    # Clean Zip file
+    Remove-Item -Path $file -Force
 } else {
     # running locally
-    Remove-Item "$installpath\$($ModuleName)" -Recurse -Force -EA Ignore
+    Remove-Item "$($installpath)\$($ModuleName)" -Recurse -Force -EA Ignore
     Copy-Item "$PSScriptRoot\$($ModuleName)" $installpath -Recurse -Force -EA Continue
     # force re-load the module (assuming you're editing locally and want to see changes)
     Import-Module -Name $($ModuleName) -Force
