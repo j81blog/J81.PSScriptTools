@@ -17,9 +17,9 @@ if (Test-Path -Path 'env:APPVEYOR_BUILD_FOLDER') {
     $environment = "GITHUB"
     Write-Host "GITHUB_RUN_NUMBER.: ${env:GITHUB_RUN_NUMBER}"
 } else {
-    # Local Testing 
+    # Local Testing
     $environment = "LOCAL"
-    
+
 }
 $projectRoot = ( Resolve-Path -Path ( Split-Path -Parent -Path $PSScriptRoot ) ).Path
 Write-Host "Environment.......: $environment"
@@ -71,6 +71,7 @@ if (Get-Variable -Name projectRoot -ErrorAction "SilentlyContinue") {
 
     # Upload test results to AppVeyor
     if ($res.FailedCount -gt 0) { Throw "$($res.FailedCount) tests failed." }
+    $Env:FailedCount = $res.FailedCount
     if ($environment -in $("LOCAL", "GITHUB")) {
         #nothing to do
     } elseif (Test-Path -Path 'env:APPVEYOR_JOB_ID') {
