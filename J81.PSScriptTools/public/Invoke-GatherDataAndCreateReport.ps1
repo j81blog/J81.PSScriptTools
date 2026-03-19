@@ -99,49 +99,49 @@
 
     Write-Host "Starting system inventory collection and report generation..." -ForegroundColor White
     try {
-        Write-Host "Collecting system information inventory..." -ForegroundColor Cyan
+        Write-Host "=> Collecting system information inventory..." -ForegroundColor Cyan
         Get-SystemInfoInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get system info inventory. Error: $($_.Exception.Message)"
     }
     try {
-        Write-Host "Collecting printer driver inventory..." -ForegroundColor Cyan
+        Write-Host "=> Collecting printer driver inventory..." -ForegroundColor Cyan
         Get-PrinterDriverInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get printer driver inventory. Error: $($_.Exception.Message)"
     }
     try {
-        Write-Host "Collecting software inventory..." -ForegroundColor Cyan
+        Write-Host "=> Collecting software inventory..." -ForegroundColor Cyan
         Get-SoftwareInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get software inventory. Error: $($_.Exception.Message)"
     }
     try {
-        Write-Host "Collecting Windows auto-run inventory..." -ForegroundColor Cyan
+        Write-Host "=> Collecting Windows auto-run inventory..." -ForegroundColor Cyan
         Get-WindowsAutoRunInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get Windows auto-run inventory. Error: $($_.Exception.Message)"
     }
     try {
-        Write-Host "Collecting Windows capability inventory..." -ForegroundColor Cyan
+        Write-Host "=> Collecting Windows capability inventory..." -ForegroundColor Cyan
         Get-WindowsCapabilityInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get Windows capability inventory. Error: $($_.Exception.Message)"
     }
     try {
-        Write-Host "Collecting Windows optional feature inventory..." -ForegroundColor Cyan
+        Write-Host "=> Collecting Windows optional feature inventory..." -ForegroundColor Cyan
         Get-WindowsOptionalFeatureInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get Windows optional feature inventory. Error: $($_.Exception.Message)"
     }
     try {
-        Write-Host "Collecting Windows store apps inventory..." -ForegroundColor Cyan
+        Write-Host "=> Collecting Windows store apps inventory..." -ForegroundColor Cyan
         Get-WindowsStoreAppsInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get Windows store apps inventory. Error: $($_.Exception.Message)"
     }
     try {
-        Write-Host "Collecting Windows update inventory..." -ForegroundColor Cyan
+        Write-Host "=> Collecting Windows update inventory..." -ForegroundColor Cyan
         Get-WindowsUpdateInventory -InventoryFilePath $InventoryFilePath
     } catch {
         Write-Warning "Failed to get Windows update inventory. Error: $($_.Exception.Message)"
@@ -159,12 +159,12 @@
         Write-Host "System inventory report generation complete." -ForegroundColor Green
         Write-Host "HTML and Markdown reports generated at: $($OutputPath)" -ForegroundColor Cyan
         if ($HTMLOnly.IsPresent) {
-            Write-Host " =>$($ReportBaseFileName).html" -ForegroundColor Cyan
+            Write-Host "=> $($ReportBaseFileName).html" -ForegroundColor Cyan
         } elseif ($MarkdownOnly.IsPresent) {
-            Write-Host " =>$($ReportBaseFileName).md" -ForegroundColor Cyan
+            Write-Host "=> $($ReportBaseFileName).md" -ForegroundColor Cyan
         } else {
-            Write-Host " =>$($ReportBaseFileName).html" -ForegroundColor Cyan
-            Write-Host " =>$($ReportBaseFileName).md" -ForegroundColor Cyan
+            Write-Host "=> $($ReportBaseFileName).html" -ForegroundColor Cyan
+            Write-Host "=> $($ReportBaseFileName).md" -ForegroundColor Cyan
         }
     } catch {
         Write-Warning "Failed to create system inventory report. Error: $($_.Exception.Message)"
@@ -175,8 +175,8 @@
 # SIG # Begin signature block
 # MIImdwYJKoZIhvcNAQcCoIImaDCCJmQCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCY13lMvGjYWchF
-# gJXxBybakyf24LvCqVKX7IFLTEqA+aCCIAowggYUMIID/KADAgECAhB6I67aU2mW
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD1t+lF99yTFrtK
+# SQotXYLt2lK8mVR7qK21YO4CvEHiBaCCIAowggYUMIID/KADAgECAhB6I67aU2mW
 # D5HIPlz0x+M/MA0GCSqGSIb3DQEBDAUAMFcxCzAJBgNVBAYTAkdCMRgwFgYDVQQK
 # Ew9TZWN0aWdvIExpbWl0ZWQxLjAsBgNVBAMTJVNlY3RpZ28gUHVibGljIFRpbWUg
 # U3RhbXBpbmcgUm9vdCBSNDYwHhcNMjEwMzIyMDAwMDAwWhcNMzYwMzIxMjM1OTU5
@@ -352,31 +352,31 @@
 # cnR1bSBDb2RlIFNpZ25pbmcgMjAyMSBDQQIQCDJPnbfakW9j5PKjPF5dUTANBglg
 # hkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3
 # DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEV
-# MC8GCSqGSIb3DQEJBDEiBCCIc7i/6OTmBV9Ru49eXTCrP995dys7xZPOj0pp64Xi
-# mzANBgkqhkiG9w0BAQEFAASCAYARhclcO27nCaLfVr5H00z2Z5T/aC73q1N7/se+
-# RGVIFzKWVyeR2lvqeiZoLhvCWrbdZPs+tJJKCTrmUV7cw611aMFdQxZqqx41ZjHQ
-# dU6nWLL1CBkW8UYEVeDt/9DS0a3UEDywKb3bXFCFuj3lCTBrhHvLgoh4b/lHWhUF
-# en5zIRFco/2JZ+rugzhGfiUv0U2dPAwjZrjL9D/36zyBALWh3Npux4Pd0c81Uzmx
-# HTT5xgIXx03v5oLybO4iNE2JgkeD+FG8r6OPNIrzYSyHJNzC3NPMrsBSJASuerjf
-# aRFFBcT+85bnB5uwXU4SLP/LCOTxHB3Lk01SyCMaTanQmKsBlOcAfLIljknU6ja0
-# uhTS4iyzvpKl6Xg3GoGEGhIGSQJ5mCr7Y2gWzIgczulla9YQnIiMdMgZqJa3bqiW
-# zQ3DYK6t9lxHOX/THm18CJZzBCC8OMPGklDoMZwWOgQJcN+71xZhHd0LztEv1FwB
-# Xr4ZrBUfFSjFeFHvFH44wMrkHlChggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
+# MC8GCSqGSIb3DQEJBDEiBCCCcDXaTiQ/GCayxvgEa0ghkY3Bgwk5/dT7/5PB8TLB
+# tDANBgkqhkiG9w0BAQEFAASCAYBHBmfWICz1hBwAYfNNO32zlemTsNtK6ryc4aS4
+# Es0WrQB0XYbuEku/k4e1exH4o+tRj6O9urJ4Rs+IQpNKK61VqXLUFcNccqIy+lob
+# JqViKzO9U2/AVq0IivBBY8N2x/RK5ZNvyY54S9XhaKLKT7mVUncoM9Zb7DBoxw7I
+# DWIrcjiNMojtozNGOZSZclO9KeRUaGMuQtCThjYP9qKz0YHKUAwHXO9VGRpx1d6V
+# E9twzrmWz9TPi3atpsP24X02kHAdMLjrxYDj0J64vkY2Me6RryHDTD0FTlBEHp5x
+# Vd9WOBHzPwrpfHRU00OAGoWa1K7ciS3z14/OmYm5YR+teAo5HXsLrF7zrkQhgYyB
+# uG6I7x+JZOKQOlkHWc2LAv2UwtJ80day3bVioHXtelFIDNjhYfFmST/VSzzFhIGA
+# 6q4s83ed2IZuqosFYfQmPagJ1FO6KGFoQoW0iN1QlZyzvmSt4Opfa0lnnAPRKp8C
+# 4CQnBkDPW/Wj12sqxb0nlZyrIw2hggMjMIIDHwYJKoZIhvcNAQkGMYIDEDCCAwwC
 # AQEwajBVMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSww
 # KgYDVQQDEyNTZWN0aWdvIFB1YmxpYyBUaW1lIFN0YW1waW5nIENBIFIzNgIRAKQp
 # O24e3denNAiHrXpOtyQwDQYJYIZIAWUDBAICBQCgeTAYBgkqhkiG9w0BCQMxCwYJ
-# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTkxOTQ3MTBaMD8GCSqGSIb3
-# DQEJBDEyBDANdIKEv4bhRLU3rMVGR6bDNEwOdSzDAFuKIKRbbNYNgfHmeAtDXz0b
-# HJRwCG/iqJcwDQYJKoZIhvcNAQEBBQAEggIArQYlilv/AEQHtQV8qpJB+D7Viz/N
-# QLPXHqvcvcVj1c0OWT1nRcrlQjPUvyIEGjJqi4gNiMx+STtCAjZ1OSjbXg4rAoN8
-# kbkLAlSoEXMQoFxqpRVeV7ZtcuOSiTqXeVHKTztcXvrAu4xziv8VH+SOCzKMDMHA
-# DlnY5ibySuYUtH6NQBa6dJLejcV8KlTqfDVZC/uTSSqs4ikg9xyN8dEakOdtlY0V
-# mRhKGnmhTit7S59KAFqr39WsIvml1qFVBR6mgchKGQkajEK367Fbj8Eevtz+TJCZ
-# UI2kpRDc/9vFx6HVlB3BJvAQp1jiTVRWXIWYaLxX60FNsUljGD9duXi1om9fjvcE
-# sKvNvLWPYuYWoabFUkFfKVBVHWwoYSINfsARgjPWVOtmL0OgCxl+8RVRgoSsvRv5
-# 0pb+UTH8RUoVr4Ze6DrFhOxuq0moSnUE2xS68tolHg5AbpezNeA+pkIoZck0p49N
-# Cg49q8LOEvL7tzPyQ7c1i9gUz3TBMzyvtH6HX5C64wBylJuRx5gsxTkOF8afK3O8
-# ZgSOKo/uXkynn4alCPD4pZu2xDnm8ZVZZRpvcuFkyvrt7LQOV8EYT9Eh1eVbFOSF
-# nbNKmuw1dzw5OCXDp78W79E7Qf3NHUQlbqSc3LSqbGfwYsfG8MZeMLbxGjam06lD
-# UpGMTP3SuvBZkfI=
+# KoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMTkxOTU3MTFaMD8GCSqGSIb3
+# DQEJBDEyBDAS5xfDgWHfWx54MUQBxMArHaK6bgY/D+6rcX0LF3H1/Wjh8pYGl9uT
+# DwHR75KWMTcwDQYJKoZIhvcNAQEBBQAEggIAvOYWMTtYMhbNOWDg9Ffd527i7hBI
+# sP544IDr1/Yd0a7fYDaoYU3BP6FtZSfP9VqA1N7lMrbwvmJSLysxIAHnzpz2ZSa5
+# /GMtXW0vnpiM3Eemjoxl5AjrtkwawfJzbPv9lFqtlFr/X9UoAFK3fJGmwHcepym9
+# KyrSaQh1dwtAeSUOtcqtd3D/ZZPTNM86cA3gruqgz4wIhMxRUvIjKmcMGEPsC41y
+# xeDgk9ImA/S7o9m5+6lAKvt+1T2/+KxMg97uvwnhTBFXVHW7oYAonhHCats67e9h
+# bph1YMn/IV8zffPuBR5Z67R9j7HzdY0nEOCP0oJ5lICveNs1O39X2dASjHGqAoLU
+# kkmzS+5lf8gt66h1NP2w58fWckZuOiz4klzYerga73B8WvjSvnM647vwIVlQKydP
+# zwRvnneHIQyQ4OG4dky3qA7Tg6HbuK8g7D/GD2bt+Xx1Unja65P/IQ1eQOVn8Rc9
+# pvvUK0csptGtS39dt2sgho29W3KtROKXAQ3ivOaHv2ZT8riDLIc2AxNiRpgqkKfI
+# N7DTy1zKnfkjbmeI033OoAIjCVGE/DZ2aj1V0iUzSr0N+BWlnBr7xLeCt4SXoC4T
+# gjESOICsvKTblcvHI6CPT0JSaVfKUt9FhZX/AUwMfQY0r1J8ATcNmKxdio0PBUXE
+# 2YBOq+ymxYC4LdQ=
 # SIG # End signature block
